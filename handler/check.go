@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/Brawl345/rssbot/storage"
 	"gopkg.in/telebot.v3"
 	"html"
 	"log"
@@ -17,7 +18,13 @@ func (h Handler) OnCheck() {
 	var wg sync.WaitGroup
 	log.Println("===============================/")
 	abonnements, err := h.DB.Abonnements.GetAll()
+	if err != nil {
+		log.Println(err)
+		time.AfterFunc(1*time.Minute, h.OnCheck)
+		return
+	}
 
+	replacements, err := h.DB.Replacements.List()
 	if err != nil {
 		log.Println(err)
 		time.AfterFunc(1*time.Minute, h.OnCheck)
@@ -58,10 +65,10 @@ func (h Handler) OnCheck() {
 				sb.WriteString(fmt.Sprintf("<i>%s</i>\n", feed.Title))
 
 				if entry.Content != "" {
-					sb.WriteString(processContent(entry.Content))
+					sb.WriteString(processContent(entry.Content, &replacements))
 					sb.WriteString("\n")
 				} else if entry.Description != "" {
-					sb.WriteString(processContent(entry.Description))
+					sb.WriteString(processContent(entry.Description, &replacements))
 					sb.WriteString("\n")
 				}
 
@@ -111,6 +118,27 @@ func (h Handler) OnCheck() {
 	wg.Wait()
 	log.Println("/===============================")
 	time.AfterFunc(1*time.Minute, h.OnCheck)
+}
+
+func processContent(content string, replacements *[]storage.Replacement) string {
+	processed := html.UnescapeString(content)
+
+	for _, replacement := range *replacements {
+		if replacement.IsRegex {
+			re := regexp.MustCompile(replacement.Value)
+			processed = re.ReplaceAllString(processed, "$1$1")
+		} else {
+			processed = strings.ReplaceAll(processed, replacement.Value, "")
+		}
+	}
+
+	processed = strings.TrimSpace(processed)
+
+	if len(processed) > 270 {
+		return processed[:270] + "..."
+	}
+
+	return processed
 }
 
 func (h Handler) sendText(chatId int64, text string, url string) error {

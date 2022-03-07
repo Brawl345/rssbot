@@ -12,7 +12,8 @@ var embeddedMigrations embed.FS
 
 type DB struct {
 	*sqlx.DB
-	Abonnements AbonnementStorage
+	Abonnements  AbonnementStorage
+	Replacements ReplacementsStorage
 }
 
 func Open(url string) (*DB, error) {
@@ -25,8 +26,9 @@ func Open(url string) (*DB, error) {
 	db.SetMaxOpenConns(100)
 
 	return &DB{
-		DB:          db,
-		Abonnements: &Abonnements{db},
+		DB:           db,
+		Abonnements:  &Abonnements{db},
+		Replacements: &Replacements{db},
 	}, nil
 }
 

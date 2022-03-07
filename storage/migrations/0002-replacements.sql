@@ -1,0 +1,55 @@
+-- +migrate Up
+
+CREATE TABLE `replacements`
+(
+    `id`         INT(11)      NOT NULL AUTO_INCREMENT,
+    `value`      VARCHAR(255) NOT NULL,
+    `is_regex`   TINYINT(1)   NOT NULL DEFAULT '0',
+    `created_at` DATETIME     NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (`id`) USING BTREE,
+    UNIQUE INDEX `value` (`value`, `is_regex`) USING BTREE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4;
+
+INSERT INTO `replacements` (`value`, `is_regex`)
+VALUES ('[←]', 0),
+       ('[…]', 0),
+       ('[...]', 0),
+       ('[bilder]', 0),
+       ('[boerse]', 0),
+       ('[mehr]', 0),
+       ('[video]', 0),
+       ('...[more]', 0),
+       ('[more]', 0),
+       ('[liveticker]', 0),
+       ('[livestream]', 0),
+       ('[multimedia]', 0),
+       ('[sportschau]', 0),
+       ('[phoenix]', 0),
+       ('[swr]', 0),
+       ('[ndr]', 0),
+       ('[mdr]', 0),
+       ('[rbb]', 0),
+       ('[wdr]', 0),
+       ('[hr]', 0),
+       ('[br]', 0),
+       ('Click for full.', 0),
+       ('Read more »', 0),
+       ('Read more', 0),
+       ('...Read More', 0),
+       ('...mehr lesen', 0),
+       ('mehr lesen', 0),
+       ('(more…)', 0),
+       ('View On WordPress', 0),
+       ('Continue reading →', 0),
+       ('» weiterlesen', 0),
+       ('(Feed generated with  FetchRSS)', 0),
+       ('(RSS generated with  FetchRss)', 0),
+       ('-- Delivered by Feed43 service', 0),
+       ('Meldung bei www.tagesschau.de lesen', 0),
+       ('Änderungen zeigen', 0),
+       ('Nächstältere Version.*', 1),
+       ('Der Beitrag.*erschien zuerst auf .+.', 1),
+       ('The post.*appeared first on .+.', 1),
+       ('http://www.serienjunkies.de/.*.html', 1),
+       ('<.*?>', 1);

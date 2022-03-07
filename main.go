@@ -75,6 +75,11 @@ func main() {
 	bot.Handle("/feeds_all", h.OnListAll)
 	bot.Handle("/rss_all", h.OnListAll)
 
+	bot.Handle("/repl_add", h.OnAddReplacement)
+	bot.Handle("/repl_add_re", h.OnAddRegexReplacement)
+	bot.Handle("/repl_list", h.OnListReplacements)
+	bot.Handle("/repl_del", h.OnDeleteReplacement)
+
 	time.AfterFunc(10*time.Second, h.OnCheck)
 
 	bot.Start()

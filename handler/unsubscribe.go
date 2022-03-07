@@ -15,7 +15,7 @@ func (h Handler) OnUnsubscribe(c telebot.Context) error {
 
 	feedId, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil {
-		return c.Send("❌ Bitte die zu löschende Feed-ID angeben.")
+		return c.Send("❌ Bitte die zu löschende Feed-ID angeben.", defaultSendOptions)
 	}
 
 	chatId := c.Chat().ID
@@ -23,16 +23,16 @@ func (h Handler) OnUnsubscribe(c telebot.Context) error {
 		// Chat ID given
 		chatInfo, err := h.Bot.ChatByUsername(args[1])
 		if err != nil {
-			return c.Send("❌ Diese Gruppe oder dieser Kanal existiert nicht.")
+			return c.Send("❌ Diese Gruppe oder dieser Kanal existiert nicht.", defaultSendOptions)
 		}
 
 		userInfo, err := h.Bot.ChatMemberOf(chatInfo, h.Bot.Me)
 		if err != nil {
-			return c.Send("❌ Diese Gruppe oder dieser Kanal existiert nicht.")
+			return c.Send("❌ Diese Gruppe oder dieser Kanal existiert nicht.", defaultSendOptions)
 		}
 
 		if chatInfo.Type == telebot.ChatChannel && !userInfo.CanPostMessages {
-			return c.Send("❌ Du musst dem Bot die Berechtigung zum Posten erteilen.")
+			return c.Send("❌ Du musst dem Bot die Berechtigung zum Posten erteilen.", defaultSendOptions)
 		}
 
 		chatId = chatInfo.ID
@@ -47,9 +47,9 @@ func (h Handler) OnUnsubscribe(c telebot.Context) error {
 	err = h.DB.Abonnements.Delete(chatId, feedId)
 	if err != nil {
 		log.Println(err)
-		return c.Send("❌ Beim Deabonnieren ist ein Fehler aufgetreten.")
+		return c.Send("❌ Beim Deabonnieren ist ein Fehler aufgetreten.", defaultSendOptions)
 	}
 
-	return c.Send("✅ Der Feed wurde deabonniert.")
+	return c.Send("✅ Der Feed wurde deabonniert.", defaultSendOptions)
 
 }

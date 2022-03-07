@@ -48,8 +48,8 @@ jobs:
         run: go build -o dist/$NAME-$GOOS-$GOARCH
 
       - name: Rename binarys (Windows)
-        if: ${{ matrix.GOOS == "windows" }}
-        run: for x in dist/windows*; do mv dist/$x dist/$x.exe; done
+        if: matrix.GOOS == 'windows'
+        run: for x in dist/windows*; do mv $x $x.exe; done
 
       - name: Compress binary
         uses: crazy-max/ghaction-upx@v1

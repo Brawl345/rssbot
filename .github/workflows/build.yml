@@ -52,7 +52,7 @@ jobs:
         run: for x in dist/$NAME-windows-*; do mv $x $x.exe; done
 
       - name: Compress binary
-        if: matrix.GOOS != 'windows' && matrix.GOARCH != 'arm64'
+        if: matrix.GOOS != 'windows' || matrix.GOARCH != 'arm64'
         uses: crazy-max/ghaction-upx@v1
         with:
           version: latest

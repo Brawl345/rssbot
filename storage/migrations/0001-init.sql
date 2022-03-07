@@ -11,13 +11,12 @@ CREATE TABLE IF NOT EXISTS `chats`
 
 CREATE TABLE IF NOT EXISTS `feeds`
 (
-    `id`         int(11)       NOT NULL AUTO_INCREMENT,
-    `url`        varchar(1024) NOT NULL,
-    `last_entry` varchar(1024)          DEFAULT NULL,
-    `created_at` datetime      NOT NULL DEFAULT current_timestamp(),
-    `updated_at` datetime               DEFAULT NULL ON UPDATE current_timestamp(),
-    PRIMARY KEY (`id`) USING BTREE,
-    UNIQUE KEY `url` (`url`(50))
+    `id`         int(11)      NOT NULL AUTO_INCREMENT,
+    `url`        varchar(512) NOT NULL UNIQUE,
+    `last_entry` varchar(1024)         DEFAULT NULL,
+    `created_at` datetime     NOT NULL DEFAULT current_timestamp(),
+    `updated_at` datetime              DEFAULT NULL ON UPDATE current_timestamp(),
+    PRIMARY KEY (`id`) USING BTREE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
 

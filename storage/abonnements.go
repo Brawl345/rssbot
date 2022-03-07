@@ -197,8 +197,7 @@ JOIN feeds ON abonnements.feed_id = feeds.id`
 
 func (db *Abonnements) SetLastEntry(feedUrl string, lastEntry *string) error {
 	const query = `UPDATE feeds
-SET feeds.last_entry = ?,
-    feeds.updated_at = current_timestamp()
+SET feeds.last_entry = ?
 WHERE feeds.url = ?`
 
 	_, err := db.Exec(query, lastEntry, feedUrl)

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS `feeds`
     `url`        varchar(1024) NOT NULL,
     `last_entry` varchar(1024)          DEFAULT NULL,
     `created_at` datetime      NOT NULL DEFAULT current_timestamp(),
-    `updated_at` datetime               DEFAULT NULL,
+    `updated_at` datetime               DEFAULT NULL ON UPDATE current_timestamp(),
     PRIMARY KEY (`id`) USING BTREE,
     UNIQUE KEY `url` (`url`) USING HASH
 ) ENGINE = InnoDB

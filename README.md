@@ -1,6 +1,6 @@
-# RSS bot for Telegram
+# RSS Bot for Telegram
 
-RSS bot for Telegram written in Go. Uses a MySQL database to store the latest entries.
+RSS Bot for Telegram written in Go. Uses a MySQL database to store the latest entries.
 
 Only one user (the "admin") can manage the bot, but it's possible to let the bot post into channels.
 

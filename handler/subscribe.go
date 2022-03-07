@@ -15,6 +15,13 @@ func (h Handler) OnSubscribe(c telebot.Context) error {
 
 	feedUrl := args[0]
 	chatId := c.Chat().ID
+	var chatTitle string
+	if c.Chat().Type == telebot.ChatPrivate {
+		chatTitle = c.Chat().FirstName
+	} else {
+		chatTitle = c.Chat().Title
+	}
+
 	if len(args) == 2 {
 		// Chat ID given
 		chatInfo, err := h.Bot.ChatByUsername(args[1])
@@ -32,6 +39,7 @@ func (h Handler) OnSubscribe(c telebot.Context) error {
 		}
 
 		chatId = chatInfo.ID
+		chatTitle = chatInfo.Title
 	}
 
 	feed, err := gofeed.NewParser().ParseURL(feedUrl)
@@ -60,7 +68,7 @@ func (h Handler) OnSubscribe(c telebot.Context) error {
 		}
 	}
 
-	err = h.DB.Abonnements.Create(chatId, feedUrl, lastEntry)
+	err = h.DB.Abonnements.Create(chatId, chatTitle, feedUrl, lastEntry)
 	if err != nil {
 		log.Println(err)
 		return c.Send("❌ Beim Abonnieren des Feeds ist ein Fehler aufgetreten.", defaultSendOptions)

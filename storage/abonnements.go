@@ -8,7 +8,7 @@ import (
 
 type (
 	AbonnementStorage interface {
-		Create(chatId int64, feedUrl string, lastEntry *string) error
+		Create(chatId int64, chatTitle string, feedUrl string, lastEntry *string) error
 		Delete(chatId int64, feedId int64) error
 		ExistsByFeedUrl(chatId int64, feedUrl string) (bool, error)
 		ExistsById(chatId int64, feedId int64) (bool, error)
@@ -28,11 +28,12 @@ type (
 
 	Chat struct {
 		ID        int64     `db:"chat_id"`
+		Title     string    `db:"title"`
 		CreatedAt time.Time `db:"chat_created_at"`
 	}
 )
 
-func (db *Abonnements) Create(chatId int64, feedUrl string, lastEntry *string) error {
+func (db *Abonnements) Create(chatId int64, chatTitle string, feedUrl string, lastEntry *string) error {
 	tx, err := db.BeginTxx(context.Background(), nil)
 	if err != nil {
 		return err
@@ -55,8 +56,8 @@ func (db *Abonnements) Create(chatId int64, feedUrl string, lastEntry *string) e
 		feedId, _ = result.LastInsertId()
 	}
 
-	const insertChatQuery = "INSERT INTO chats (id) VALUES (?) ON DUPLICATE KEY UPDATE id = id"
-	_, err = tx.Exec(insertChatQuery, chatId)
+	const insertChatQuery = "INSERT INTO chats (id, title) VALUES (?, ?) ON DUPLICATE KEY UPDATE title = ?"
+	_, err = tx.Exec(insertChatQuery, chatId, chatTitle, chatTitle)
 
 	if err != nil {
 		return err
@@ -157,7 +158,8 @@ WHERE chats.id = ?`
 }
 
 func (db *Abonnements) GetAll() ([]Abonnement, error) {
-	const query = `SELECT chats.id AS "chat_id", chats.created_at AS "chat_created_at", feeds.* FROM abonnements
+	const query = `SELECT chats.id AS "chat_id", chats.created_at AS "chat_created_at", chats.title, feeds.* 
+FROM abonnements
 JOIN chats ON abonnements.chat_id = chats.id
 JOIN feeds ON abonnements.feed_id = feeds.id`
 
@@ -171,7 +173,8 @@ JOIN feeds ON abonnements.feed_id = feeds.id`
 	for rows.Next() {
 		var chat Chat
 		var feed Feed
-		rows.Scan(&chat.ID, &chat.CreatedAt, &feed.ID, &feed.Url, &feed.LastEntry, &feed.CreatedAt, &feed.UpdatedAt)
+		rows.Scan(&chat.ID, &chat.CreatedAt, &chat.Title,
+			&feed.ID, &feed.Url, &feed.LastEntry, &feed.CreatedAt, &feed.UpdatedAt)
 
 		feeds[feed.ID] = feed
 

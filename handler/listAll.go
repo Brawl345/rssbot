@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"gopkg.in/telebot.v3"
+	"html"
 	"log"
 	"strings"
 )
@@ -29,7 +30,8 @@ func (h Handler) OnListAll(c telebot.Context) error {
 		sb.WriteString(fmt.Sprintf("<b>%d)</b> %s\n", abonnement.Feed.ID, abonnement.Feed.Url))
 
 		for _, chat := range abonnement.Chats {
-			sb.WriteString(fmt.Sprintf("    <code>%d</code>\n", chat.ID))
+			sb.WriteString(fmt.Sprintf("    <code>%d</code> (%s)\n", chat.ID,
+				html.EscapeString(chat.Title)))
 		}
 
 		sb.WriteString("\n")

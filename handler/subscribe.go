@@ -19,16 +19,16 @@ func (h Handler) OnSubscribe(c telebot.Context) error {
 		// Chat ID given
 		chatInfo, err := h.Bot.ChatByUsername(args[1])
 		if err != nil {
-			return c.Send("❌ Dieser Kanal existiert nicht.")
+			return c.Send("❌ Diese Gruppe oder dieser Kanal existiert nicht.")
 		}
 
 		userInfo, err := h.Bot.ChatMemberOf(chatInfo, h.Bot.Me)
 		if err != nil {
-			return c.Send("❌ Dieser Kanal existiert nicht.")
+			return c.Send("❌ Diese Gruppe oder dieser Kanal existiert nicht.")
 		}
 
-		if userInfo.Role != telebot.Administrator || !userInfo.CanPostMessages {
-			return c.Send("❌ Du musst den Bot als Administrator zu diesem Kanal hinzufügen und/oder die Berechtigung zum Posten erteilen.")
+		if chatInfo.Type == telebot.ChatChannel && !userInfo.CanPostMessages {
+			return c.Send("❌ Du musst dem Bot die Berechtigung zum Posten erteilen.")
 		}
 
 		chatId = chatInfo.ID

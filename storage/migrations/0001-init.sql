@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS `feeds`
     `created_at` datetime      NOT NULL DEFAULT current_timestamp(),
     `updated_at` datetime               DEFAULT NULL ON UPDATE current_timestamp(),
     PRIMARY KEY (`id`) USING BTREE,
-    UNIQUE KEY `url` (`url`) USING HASH
+    UNIQUE KEY `url` (`url`(50))
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
 

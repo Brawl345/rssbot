@@ -80,7 +80,7 @@ func main() {
 	bot.Handle("/repl_list", h.OnListReplacements)
 	bot.Handle("/repl_del", h.OnDeleteReplacement)
 
-	time.AfterFunc(10*time.Second, h.OnCheck)
+	time.AfterFunc(5*time.Second, h.OnCheck)
 
 	bot.Start()
 }

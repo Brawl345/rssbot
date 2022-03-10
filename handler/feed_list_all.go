@@ -9,8 +9,7 @@ import (
 )
 
 func (h Handler) OnListAll(c telebot.Context) error {
-	if c.Chat().Type != telebot.ChatPrivate {
-		// Block command in chats to avoid leaking information
+	if !c.Message().Private() {
 		return nil
 	}
 

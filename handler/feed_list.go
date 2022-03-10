@@ -17,7 +17,7 @@ func (h Handler) OnList(c telebot.Context) error {
 
 	chatId := c.Chat().ID
 	var chatTitle string
-	if c.Chat().Type == telebot.ChatPrivate {
+	if c.Message().Private() {
 		chatTitle = c.Chat().FirstName
 	} else {
 		chatTitle = c.Chat().Title

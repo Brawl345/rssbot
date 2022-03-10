@@ -16,7 +16,7 @@ func (h Handler) OnSubscribe(c telebot.Context) error {
 	feedUrl := args[0]
 	chatId := c.Chat().ID
 	var chatTitle string
-	if c.Chat().Type == telebot.ChatPrivate {
+	if c.Message().Private() {
 		chatTitle = c.Chat().FirstName
 	} else {
 		chatTitle = c.Chat().Title

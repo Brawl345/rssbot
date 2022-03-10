@@ -11,7 +11,7 @@ import (
 func (h Handler) OnListReplacements(c telebot.Context) error {
 	replacements, err := h.DB.Replacements.List()
 
-	if c.Chat().Type != telebot.ChatPrivate {
+	if !c.Message().Private() {
 		// Block command in chats to avoid leaking information
 		return nil
 	}

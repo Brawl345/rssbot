@@ -126,7 +126,7 @@ func processContent(content string, replacements *[]storage.Replacement) string 
 	for _, replacement := range *replacements {
 		if replacement.IsRegex {
 			re := regexp.MustCompile(replacement.Value)
-			processed = re.ReplaceAllString(processed, "$1$1")
+			processed = re.ReplaceAllString(processed, "")
 		} else {
 			processed = strings.ReplaceAll(processed, replacement.Value, "")
 		}

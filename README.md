@@ -24,7 +24,7 @@ Feeds are checked every minute after the latest check finished (it waits for fiv
 
 ### Use your own template
 
-The bot reads the `post.gohtml` from the same directory and uses it as a [Go template](https://pkg.go.dev/text/template) where it inserts the data. Take a look inside the [handler/feed_check.go](handler/feed_check.go) file (the `TemplateData` struct) to see all available fields. You can find the default template inside the [config/config.go](config/config.go) file. [Limited HTML](https://core.telegram.org/bots/api#html-style) is supported and all fields are sanitized with HTML fields removed and "replacements" applied. 
+The bot reads the `post.gohtml` from the same directory and uses it as a [Go template](https://pkg.go.dev/text/template) where it inserts the data. Take a look inside the [handler/feed_check.go](handler/feed_check.go) file (the `TemplateData` struct) to see all available fields. You can find the default template inside the [config/config.go](config/config.go) file. [Limited HTML](https://core.telegram.org/bots/api#html-style) is supported and all fields are sanitized with HTML tags removed and "replacements" applied. 
 
 Example:
 

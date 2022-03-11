@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/Brawl345/rssbot/config"
 	"github.com/Brawl345/rssbot/handler"
 	_ "github.com/joho/godotenv/autoload"
 	"gopkg.in/telebot.v3"
@@ -14,6 +15,15 @@ import (
 )
 
 func main() {
+	tmpl, err := config.GetTemplate("post.gohtml")
+	if err != nil {
+		log.Fatal("Invalid template: ", err)
+	}
+
+	cfg := &config.Config{
+		Template: tmpl,
+	}
+
 	db, err := storage.Open(os.Getenv("MYSQL_URL"))
 	if err != nil {
 		log.Fatal(err)
@@ -46,8 +56,9 @@ func main() {
 	log.Printf("Logged in as @%s (%d)", bot.Me.Username, bot.Me.ID)
 
 	h := handler.Handler{
-		Bot: bot,
-		DB:  db,
+		Bot:    bot,
+		Config: cfg,
+		DB:     db,
 	}
 
 	adminId, err := strconv.ParseInt(os.Getenv("ADMIN_ID"), 10, 64)

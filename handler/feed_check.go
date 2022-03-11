@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"bytes"
 	"errors"
-	"fmt"
 	"github.com/Brawl345/rssbot/storage"
 	"gopkg.in/telebot.v3"
 	"html"
@@ -13,6 +13,14 @@ import (
 	"sync"
 	"time"
 )
+
+type TemplateData struct {
+	Title      string
+	FeedTitle  string
+	Content    string
+	PostLink   string
+	PostDomain string
+}
 
 func (h Handler) OnCheck() {
 	var wg sync.WaitGroup
@@ -40,7 +48,6 @@ func (h Handler) OnCheck() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sb := strings.Builder{}
 
 			log.Printf("%s", abonnement.Feed.Url)
 
@@ -56,52 +63,53 @@ func (h Handler) OnCheck() {
 			}
 
 			for _, entry := range reverse(feed.Items) {
+				templateData := &TemplateData{}
 				if entry.Title != "" {
-					sb.WriteString(fmt.Sprintf("<b>%s</b>\n", html.EscapeString(entry.Title)))
+					templateData.Title = html.EscapeString(entry.Title)
 				} else {
-					sb.WriteString("<b>Kein Titel</b>\n")
+					templateData.Title = "Kein Titel"
 				}
 
-				sb.WriteString(fmt.Sprintf("<i>%s</i>\n", feed.Title))
+				templateData.FeedTitle = html.EscapeString(feed.Title)
 
 				if entry.Content != "" {
-					sb.WriteString(processContent(entry.Content, &replacements))
-					sb.WriteString("\n")
+					templateData.Content = processContent(entry.Content, &replacements)
 				} else if entry.Description != "" {
-					sb.WriteString(processContent(entry.Description, &replacements))
-					sb.WriteString("\n")
+					templateData.Content = processContent(entry.Description, &replacements)
 				}
 
-				var postLink string
 				if entry.Link != "" {
-					postLink = entry.Link
+					templateData.PostLink = entry.Link
 				} else {
-					postLink = feed.Link
+					templateData.PostLink = feed.Link
 				}
 
 				re := regexp.MustCompile("^https?://feedproxy.google.com/~r/(.+?)/.*")
-				match := re.FindStringSubmatch(postLink)
+				match := re.FindStringSubmatch(templateData.PostLink)
 
-				var linkName string
 				if len(match) > 0 {
-					linkName = match[1]
+					templateData.PostDomain = match[1]
 				} else {
-					parsedUrl, _ := url.Parse(postLink)
-					linkName = parsedUrl.Host
+					parsedUrl, _ := url.Parse(templateData.PostLink)
+					templateData.PostDomain = parsedUrl.Host
 				}
 
-				linkName = strings.Replace(linkName, "www.", "", 1)
+				templateData.PostDomain = strings.Replace(templateData.PostDomain, "www.", "", 1)
 
-				sb.WriteString(fmt.Sprintf("<a href=\"%s\">Weiterlesen auf %s</a>", postLink, linkName))
+				var tpl bytes.Buffer
+				err := h.Config.Template.Execute(&tpl, templateData)
+				if err != nil {
+					log.Printf("%s: %s", abonnement.Feed.Url, err)
+					return
+				}
 
 				for _, chat := range abonnement.Chats {
-					err = h.sendText(chat.ID, sb.String(), abonnement.Feed.Url)
+					err = h.sendText(chat.ID, tpl.String(), abonnement.Feed.Url)
 					if err != nil {
 						log.Printf("%s: %s", abonnement.Feed.Url, err)
 					}
 				}
 
-				sb.Reset()
 			}
 			if len(feed.Items) > 0 {
 				var lastEntry *string

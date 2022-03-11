@@ -132,6 +132,7 @@ func processContent(content string, replacements *[]storage.Replacement) string 
 		}
 	}
 
+	processed = regexp.MustCompile("(?m)^\\s*$[\r\n]*").ReplaceAllString(processed, "")
 	processed = strings.TrimSpace(processed)
 
 	if len(processed) > 270 {

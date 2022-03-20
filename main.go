@@ -6,7 +6,9 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 	"gopkg.in/telebot.v3"
 	"gopkg.in/telebot.v3/middleware"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/Brawl345/rssbot/storage"
@@ -92,6 +94,23 @@ func main() {
 	bot.Handle("/repl_del", h.OnDeleteReplacement)
 
 	time.AfterFunc(5*time.Second, h.OnCheck)
+
+	channel := make(chan os.Signal)
+	signal.Notify(channel, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(channel, os.Interrupt, syscall.SIGKILL)
+	signal.Notify(channel, os.Interrupt, syscall.SIGINT)
+	go func() {
+		<-channel
+		log.Println("Stopping...")
+		bot.Stop()
+		err := db.Close()
+		if err != nil {
+			log.Println(err)
+			os.Exit(1)
+			return
+		}
+		os.Exit(0)
+	}()
 
 	bot.Start()
 }

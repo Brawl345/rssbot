@@ -152,10 +152,13 @@ func processContent(content string, replacements *[]storage.Replacement) string 
 
 func (h Handler) sendText(chatId int64, text string, url string) error {
 	_, err := h.Bot.Send(telebot.ChatID(chatId), text, defaultSendOptions)
+
+	var floodError *telebot.FloodError
+
 	if err != nil {
-		if errors.As(err, &telebot.FloodError{}) {
+		if errors.As(err, floodError) {
 			log.Printf("%s: Flood error, retrying after: %d seconds", url,
-				err.(telebot.FloodError).RetryAfter)
+				floodError.RetryAfter)
 			time.Sleep(time.Duration(err.(telebot.FloodError).RetryAfter) * time.Second)
 			h.sendText(chatId, text, url)
 		} else {

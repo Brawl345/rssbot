@@ -156,7 +156,7 @@ func (h Handler) sendText(chatId int64, text string, url string) error {
 	var floodError *telebot.FloodError
 
 	if err != nil {
-		if errors.As(err, floodError) {
+		if errors.As(err, &floodError) {
 			log.Printf("%s: Flood error, retrying after: %d seconds", url,
 				floodError.RetryAfter)
 			time.Sleep(time.Duration(err.(telebot.FloodError).RetryAfter) * time.Second)

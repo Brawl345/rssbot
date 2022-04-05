@@ -1,19 +1,21 @@
 package main
 
 import (
-	"github.com/Brawl345/rssbot/config"
-	"github.com/Brawl345/rssbot/handler"
-	_ "github.com/joho/godotenv/autoload"
-	"gopkg.in/telebot.v3"
-	"gopkg.in/telebot.v3/middleware"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/Brawl345/rssbot/storage"
+	"github.com/Brawl345/rssbot/config"
+	"github.com/Brawl345/rssbot/handler"
+	_ "github.com/joho/godotenv/autoload"
+	"gopkg.in/telebot.v3"
+	"gopkg.in/telebot.v3/middleware"
+
 	"log"
 	"os"
+
+	"github.com/Brawl345/rssbot/storage"
 )
 
 func main() {
@@ -26,12 +28,8 @@ func main() {
 		Template: tmpl,
 	}
 
-	db, err := storage.Open(os.Getenv("MYSQL_URL"))
+	db, err := storage.Connect()
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := db.Ping(); err != nil {
 		log.Fatal(err)
 	}
 

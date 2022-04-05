@@ -2,6 +2,10 @@ package storage
 
 import (
 	"embed"
+	"fmt"
+	"os"
+	"strings"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	migrate "github.com/rubenv/sql-migrate"
@@ -16,19 +20,34 @@ type DB struct {
 	Replacements ReplacementsStorage
 }
 
-func Open(url string) (*DB, error) {
-	db, err := sqlx.Open("mysql", url)
+func Connect() (*DB, error) {
+	host := strings.TrimSpace(os.Getenv("MYSQL_HOST"))
+	port := strings.TrimSpace(os.Getenv("MYSQL_PORT"))
+	user := strings.TrimSpace(os.Getenv("MYSQL_USER"))
+	password := strings.TrimSpace(os.Getenv("MYSQL_PASSWORD"))
+	db := strings.TrimSpace(os.Getenv("MYSQL_DB"))
+
+	connectionString := fmt.Sprintf(
+		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		user,
+		password,
+		host,
+		port,
+		db,
+	)
+
+	conn, err := sqlx.Connect("mysql", connectionString)
 	if err != nil {
 		return nil, err
 	}
 
-	db.SetMaxIdleConns(100)
-	db.SetMaxOpenConns(100)
+	conn.SetMaxIdleConns(100)
+	conn.SetMaxOpenConns(100)
 
 	return &DB{
-		DB:           db,
-		Abonnements:  &Abonnements{db},
-		Replacements: &Replacements{db},
+		DB:           conn,
+		Abonnements:  &Abonnements{DB: conn},
+		Replacements: &Replacements{DB: conn},
 	}, nil
 }
 

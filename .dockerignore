@@ -1,0 +1,8 @@
+*
+!config/
+!handler/
+!storage/
+!go.mod
+!go.sum
+!main.go
+!post.gohtml

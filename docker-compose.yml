@@ -3,9 +3,9 @@ version: '3.8'
 name: rssbot
 services:
   bot:
-    build: .
+    # build: .
     pull_policy: always
-    # image: ghcr.io/brawl345/rssbot:latest
+    image: ghcr.io/brawl345/rssbot:latest
     restart: always
     env_file: .env
 

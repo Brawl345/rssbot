@@ -45,7 +45,7 @@
 
       packages = forAllSystems
         (pkgs: {
-          gobot =
+          rssbot =
             pkgs.buildGoModule
               {
                 pname = "rssbot";
@@ -66,7 +66,7 @@
                 };
               };
 
-          default = self.packages.${pkgs.system}.gobot;
+          default = self.packages.${pkgs.system}.rssbot;
         });
     };
 }

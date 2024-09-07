@@ -24,9 +24,9 @@
     in
     {
 
-      # nixosModules = {
-      #   default = ./module.nix;
-      # };
+      nixosModules = {
+        default = ./module.nix;
+      };
 
       overlays.default = final: prev: {
         rssbot = self.packages.${prev.system}.default;

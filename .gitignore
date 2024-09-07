@@ -3,3 +3,5 @@ dist/
 *.iml
 .env
 post.gohtml
+rssbot
+result

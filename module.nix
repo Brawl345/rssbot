@@ -89,7 +89,6 @@ in
         Restart = "always";
         User = cfg.user;
         Group = defaultUser;
-        WorkingDirectory = "/var/lib/rssbot";
       };
 
       environment = {

@@ -1,9 +1,23 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.services.rssbot;
   defaultUser = "rssbot";
-  inherit (lib) mkEnableOption mkPackageOption mkOption mkIf types optionalAttrs;
+  inherit (lib)
+    mkEnableOption
+    mkPackageOption
+    mkOption
+    mkIf
+    types
+    optional
+    optionalAttrs
+    optionalString
+    ;
 in
 {
   options.services.rssbot = {
@@ -60,14 +74,55 @@ in
       };
 
       passwordFile = lib.mkOption {
-        type = types.path;
+        type = types.nullOr types.path;
+        default = null;
         description = "Database user password file.";
+      };
+
+      socket = mkOption {
+        type = types.nullOr types.path;
+        default =
+          if config.services.rssbot.database.passwordFile == null then "/run/mysqld/mysqld.sock" else null;
+        example = "/run/mysqld/mysqld.sock";
+        description = "Path to the unix socket file to use for authentication.";
+      };
+
+      createLocally = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Create the database locally";
       };
     };
 
   };
 
   config = mkIf cfg.enable {
+
+    assertions = [
+      {
+        assertion = !(cfg.database.socket != null && cfg.database.passwordFile != null);
+        message = "Only one of services.rssbot.database.socket or services.rssbot.database.passwordFile can be set.";
+      }
+      {
+        assertion = cfg.database.socket != null || cfg.database.passwordFile != null;
+        message = "Either services.rssbot.database.socket or services.rssbot.database.passwordFile must be set.";
+      }
+    ];
+
+    services.mysql = lib.mkIf cfg.database.createLocally {
+      enable = lib.mkDefault true;
+      package = lib.mkDefault pkgs.mariadb;
+      ensureDatabases = [ cfg.database.name ];
+      ensureUsers = [
+        {
+          name = cfg.database.user;
+          ensurePermissions = {
+            "${cfg.database.name}.*" = "ALL PRIVILEGES";
+          };
+        }
+      ];
+    };
+
     systemd.services.rssbot = {
       description = "RSS Bot for Telegram";
       after = [ "network.target" ];
@@ -75,7 +130,9 @@ in
 
       script = ''
         export BOT_TOKEN="$(< $CREDENTIALS_DIRECTORY/BOT_TOKEN )"
-        export MYSQL_PASSWORD="$(< $CREDENTIALS_DIRECTORY/MYSQL_PASSWORD )"
+        ${optionalString (cfg.database.passwordFile != null) ''
+          export MYSQL_PASSWORD="$(< $CREDENTIALS_DIRECTORY/MYSQL_PASSWORD )"
+        ''}
 
         exec ${cfg.package}/bin/rssbot
       '';
@@ -83,8 +140,7 @@ in
       serviceConfig = {
         LoadCredential = [
           "BOT_TOKEN:${cfg.botTokenFile}"
-          "MYSQL_PASSWORD:${cfg.database.passwordFile}"
-        ];
+        ] ++ optional (cfg.database.passwordFile != null) "MYSQL_PASSWORD:${cfg.database.passwordFile}";
 
         Restart = "always";
         User = cfg.user;
@@ -97,6 +153,7 @@ in
         MYSQL_PORT = toString cfg.database.port;
         MYSQL_USER = cfg.database.user;
         MYSQL_DB = cfg.database.name;
+        MYSQL_SOCKET = cfg.database.socket;
       };
     };
 

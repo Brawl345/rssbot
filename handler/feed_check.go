@@ -161,7 +161,10 @@ func (h *Handler) sendText(chatId int64, text string, url string) error {
 			log.Printf("%s: Flood error, retrying after: %d seconds", url,
 				floodError.RetryAfter)
 			time.Sleep(time.Duration(err.(telebot.FloodError).RetryAfter) * time.Second)
-			h.sendText(chatId, text, url)
+			err := h.sendText(chatId, text, url)
+			if err != nil {
+				return err
+			}
 		} else {
 			return err
 		}

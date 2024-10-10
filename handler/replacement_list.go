@@ -2,13 +2,14 @@ package handler
 
 import (
 	"fmt"
-	"gopkg.in/telebot.v3"
 	"html"
 	"log"
 	"strings"
+
+	"gopkg.in/telebot.v3"
 )
 
-func (h Handler) OnListReplacements(c telebot.Context) error {
+func (h *Handler) OnListReplacements(c telebot.Context) error {
 	replacements, err := h.DB.Replacements.List()
 
 	if !c.Message().Private() {

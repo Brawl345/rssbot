@@ -1,12 +1,13 @@
 package handler
 
 import (
+	"log"
+
 	"github.com/mmcdole/gofeed"
 	"gopkg.in/telebot.v3"
-	"log"
 )
 
-func (h Handler) OnSubscribe(c telebot.Context) error {
+func (h *Handler) OnSubscribe(c telebot.Context) error {
 	args := c.Args()
 
 	if len(args) == 0 || len(args) > 2 {

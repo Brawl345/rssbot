@@ -1,11 +1,12 @@
 package handler
 
 import (
-	"gopkg.in/telebot.v3"
 	"strings"
+
+	"gopkg.in/telebot.v3"
 )
 
-func (h Handler) OnStart(c telebot.Context) error {
+func (h *Handler) OnStart(c telebot.Context) error {
 	var sb strings.Builder
 	sb.WriteString("<b>/rss</b> <i>[Chat]</i>: Abonnierte Feeds anzeigen\n")
 	sb.WriteString("<b>/rss_all</b>: Alle abonnierten Feeds aus jedem Chat anzeigen\n")

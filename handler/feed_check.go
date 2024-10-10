@@ -3,8 +3,6 @@ package handler
 import (
 	"bytes"
 	"errors"
-	"github.com/Brawl345/rssbot/storage"
-	"gopkg.in/telebot.v3"
 	"html"
 	"log"
 	"net/url"
@@ -12,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Brawl345/rssbot/storage"
+	"gopkg.in/telebot.v3"
 )
 
 type TemplateData struct {
@@ -22,7 +23,7 @@ type TemplateData struct {
 	PostDomain string
 }
 
-func (h Handler) OnCheck() {
+func (h *Handler) OnCheck() {
 	var wg sync.WaitGroup
 	log.Println("===============================/")
 	abonnements, err := h.DB.Abonnements.GetAll()
@@ -150,7 +151,7 @@ func processContent(content string, replacements *[]storage.Replacement) string 
 	return processed
 }
 
-func (h Handler) sendText(chatId int64, text string, url string) error {
+func (h *Handler) sendText(chatId int64, text string, url string) error {
 	_, err := h.Bot.Send(telebot.ChatID(chatId), text, defaultSendOptions)
 
 	var floodError *telebot.FloodError

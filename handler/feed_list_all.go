@@ -2,13 +2,14 @@ package handler
 
 import (
 	"fmt"
-	"gopkg.in/telebot.v3"
 	"html"
 	"log"
 	"strings"
+
+	"gopkg.in/telebot.v3"
 )
 
-func (h Handler) OnListAll(c telebot.Context) error {
+func (h *Handler) OnListAll(c telebot.Context) error {
 	if !c.Message().Private() {
 		return nil
 	}

@@ -2,13 +2,14 @@ package handler
 
 import (
 	"fmt"
-	"gopkg.in/telebot.v3"
 	"html"
 	"log"
 	"strings"
+
+	"gopkg.in/telebot.v3"
 )
 
-func (h Handler) OnList(c telebot.Context) error {
+func (h *Handler) OnList(c telebot.Context) error {
 	args := c.Args()
 
 	if len(args) > 1 {

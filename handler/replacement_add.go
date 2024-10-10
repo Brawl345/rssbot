@@ -1,11 +1,12 @@
 package handler
 
 import (
-	"github.com/go-sql-driver/mysql"
-	"gopkg.in/telebot.v3"
 	"log"
 	"regexp"
 	"strings"
+
+	"github.com/go-sql-driver/mysql"
+	"gopkg.in/telebot.v3"
 )
 
 func (h *Handler) OnAddReplacement(c telebot.Context) error {

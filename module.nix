@@ -125,8 +125,8 @@ in
 
     systemd.services.rssbot = {
       description = "RSS Bot for Telegram";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
+      after = [ "network-online.target" "mysql.service" ];
+      requires = [ "network-online.target" "mysql.service" ];
       wantedBy = [ "multi-user.target" ];
 
       script = ''

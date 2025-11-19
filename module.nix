@@ -41,12 +41,11 @@ in
       description = "File containing Telegram Bot Token";
     };
 
-    # TODO: Find a way to load a custom post.gohtml
-    # template = mkOption {
-    #   type = types.nullOr types.lines;
-    #   default = null;
-    #   description = "Custom post.gohtml template content";
-    # };
+    templateFile = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      description = "Path to a custom post.gohtml template file";
+    };
 
     database = {
       host = lib.mkOption {
@@ -129,6 +128,10 @@ in
       requires = [ "network-online.target" "mysql.service" ];
       wantedBy = [ "multi-user.target" ];
 
+      preStart = optionalString (cfg.templateFile != null) ''
+        cp ${cfg.templateFile} $STATE_DIRECTORY/post.gohtml
+      '';
+
       script = ''
         export BOT_TOKEN="$(< $CREDENTIALS_DIRECTORY/BOT_TOKEN )"
         ${optionalString (cfg.database.passwordFile != null) ''
@@ -143,6 +146,8 @@ in
           "BOT_TOKEN:${cfg.botTokenFile}"
         ] ++ optional (cfg.database.passwordFile != null) "MYSQL_PASSWORD:${cfg.database.passwordFile}";
 
+        StateDirectory = "rssbot";
+        WorkingDirectory = "/var/lib/rssbot";
         Restart = "always";
         User = cfg.user;
         Group = defaultUser;

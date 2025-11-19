@@ -57,11 +57,21 @@ func (h *Handler) OnCheck() {
 				lastEntry = &abonnement.LastEntry.String
 			}
 
-			feed, err := abonnement.Feed.Check(lastEntry)
+			result, err := abonnement.Feed.Check(lastEntry)
 			if err != nil {
 				log.Printf("%s: %s", abonnement.Feed.Url, err)
 				return
 			}
+
+			// Update cache headers if we got new ones
+			if result.ETag != nil || result.LastModified != nil {
+				err = h.DB.Abonnements.SetCacheHeaders(abonnement.Feed.Url, result.ETag, result.LastModified)
+				if err != nil {
+					log.Printf("%s: failed to update cache headers: %s", abonnement.Feed.Url, err)
+				}
+			}
+
+			feed := result.Feed
 
 			for _, entry := range reverse(feed.Items) {
 				templateData := &TemplateData{}

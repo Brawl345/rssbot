@@ -57,16 +57,17 @@ func main() {
 
 	log.Printf("Logged in as @%s (%d)", bot.Me.Username, bot.Me.ID)
 
+	adminId, err := strconv.ParseInt(os.Getenv("ADMIN_ID"), 10, 64)
+
 	h := handler.Handler{
 		Bot:     bot,
 		Config:  cfg,
 		DB:      db,
 		Fetcher: fetcher.New(),
+		AdminID: adminId,
 	}
 
 	log.Printf("Feed fetcher User-Agent: %s", h.Fetcher.UserAgent())
-
-	adminId, err := strconv.ParseInt(os.Getenv("ADMIN_ID"), 10, 64)
 
 	if err != nil {
 		// No admin = unsupported.

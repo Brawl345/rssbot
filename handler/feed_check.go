@@ -310,11 +310,15 @@ func (h *Handler) errorBackoff(errorCount int) time.Duration {
 	return interval
 }
 
+// notify sends operational messages (disable, redirect, rate-limit) to the
+// admin only — never into the subscriber chats/channels, which are reserved for
+// feed content.
 func (h *Handler) notify(abonnement storage.Abonnement, text string) {
-	for _, chat := range abonnement.Chats {
-		if err := h.sendText(chat.ID, text, abonnement.Feed.Url); err != nil {
-			log.Printf("%s: notify failed: %s", abonnement.Feed.Url, err)
-		}
+	if h.AdminID == 0 {
+		return
+	}
+	if err := h.sendText(h.AdminID, text, abonnement.Feed.Url); err != nil {
+		log.Printf("%s: notify failed: %s", abonnement.Feed.Url, err)
 	}
 }
 

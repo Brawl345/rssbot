@@ -12,4 +12,5 @@ type Handler struct {
 	Config  *config.Config
 	DB      *storage.DB
 	Fetcher *fetcher.Fetcher
+	AdminID int64
 }

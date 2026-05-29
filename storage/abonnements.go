@@ -3,20 +3,24 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"github.com/jmoiron/sqlx"
-	"github.com/mmcdole/gofeed"
 	"time"
+
+	"github.com/jmoiron/sqlx"
 )
 
 type (
 	AbonnementStorage interface {
-		Create(chatId int64, chatTitle string, feedUrl string, lastEntry *string) error
+		Create(chatId int64, chatTitle string, feedUrl string, lastEntry, etag, lastModified *string, nextPollAt time.Time) error
 		Delete(chatId int64, feedId int64) error
 		ExistsByFeedUrl(chatId int64, feedUrl string) (bool, error)
 		ExistsById(chatId int64, feedId int64) (bool, error)
 		GetByUser(chatId int64) ([]Feed, error)
 		GetAll() ([]Abonnement, error)
-		SetLastEntry(feedUrl string, lastEntry *string) error
+		GetDue() ([]Abonnement, error)
+		SetFeedState(feedID int64, lastEntry, etag, lastModified *string, nextPollAt time.Time, errorCount, unchangedCount int) error
+		Reschedule(feedID int64, nextPollAt time.Time, errorCount, unchangedCount int) error
+		SetFeedURL(feedID int64, newURL string) error
+		DisableFeed(feedID int64, reason string) error
 	}
 
 	Abonnements struct {
@@ -35,15 +39,23 @@ type (
 	}
 
 	Feed struct {
-		ID        int64          `db:"id"`
-		Url       string         `db:"url"`
-		LastEntry sql.NullString `db:"last_entry"`
-		CreatedAt time.Time      `db:"created_at"`
-		UpdatedAt sql.NullTime   `db:"updated_at"`
+		ID             int64          `db:"id"`
+		Url            string         `db:"url"`
+		LastEntry      sql.NullString `db:"last_entry"`
+		CreatedAt      time.Time      `db:"created_at"`
+		UpdatedAt      sql.NullTime   `db:"updated_at"`
+		ETag           sql.NullString `db:"etag"`
+		LastModified   sql.NullString `db:"last_modified"`
+		NextPollAt     sql.NullTime   `db:"next_poll_at"`
+		LastPollAt     sql.NullTime   `db:"last_poll_at"`
+		ErrorCount     int            `db:"error_count"`
+		UnchangedCount int            `db:"unchanged_count"`
+		Disabled       bool           `db:"disabled"`
+		DisabledReason sql.NullString `db:"disabled_reason"`
 	}
 )
 
-func (db *Abonnements) Create(chatId int64, chatTitle string, feedUrl string, lastEntry *string) error {
+func (db *Abonnements) Create(chatId int64, chatTitle string, feedUrl string, lastEntry, etag, lastModified *string, nextPollAt time.Time) error {
 	tx, err := db.BeginTxx(context.Background(), nil)
 	if err != nil {
 		return err
@@ -57,8 +69,8 @@ func (db *Abonnements) Create(chatId int64, chatTitle string, feedUrl string, la
 
 	if err != nil {
 		// Feed does not exist yet, will be created
-		const insertFeedQuery = "INSERT INTO feeds (url, last_entry) VALUES (?, ?)"
-		result, err := tx.Exec(insertFeedQuery, feedUrl, lastEntry)
+		const insertFeedQuery = "INSERT INTO feeds (url, last_entry, etag, last_modified, next_poll_at) VALUES (?, ?, ?, ?, ?)"
+		result, err := tx.Exec(insertFeedQuery, feedUrl, lastEntry, etag, lastModified, nextPollAt)
 		if err != nil {
 			return err
 		}
@@ -167,67 +179,104 @@ WHERE chats.id = ?`
 	return feeds, err
 }
 
-func (db *Abonnements) GetAll() ([]Abonnement, error) {
-	const query = `SELECT chats.id AS "chat_id", chats.created_at AS "chat_created_at", chats.title, feeds.* 
+// abonnementSelect lists feed columns explicitly so the manual row scan does
+// not depend on the physical column order of `feeds.*`.
+const abonnementSelect = `SELECT chats.id, chats.created_at, chats.title,
+feeds.id, feeds.url, feeds.last_entry, feeds.created_at, feeds.updated_at,
+feeds.etag, feeds.last_modified, feeds.next_poll_at, feeds.last_poll_at,
+feeds.error_count, feeds.unchanged_count, feeds.disabled, feeds.disabled_reason
 FROM abonnements
 JOIN chats ON abonnements.chat_id = chats.id
 JOIN feeds ON abonnements.feed_id = feeds.id`
 
-	rows, _ := db.Queryx(query)
+func (db *Abonnements) GetAll() ([]Abonnement, error) {
+	rows, err := db.Queryx(abonnementSelect)
+	if err != nil {
+		return nil, err
+	}
+	return scanAbonnements(rows)
+}
+
+// GetDue returns only feeds that are enabled and whose scheduled poll time has
+// passed (or was never set). This is what keeps polling on a per-feed schedule
+// and prevents a process restart from re-downloading everything (FRB037).
+func (db *Abonnements) GetDue() ([]Abonnement, error) {
+	const where = ` WHERE feeds.disabled = 0 AND (feeds.next_poll_at IS NULL OR feeds.next_poll_at <= NOW())`
+	rows, err := db.Queryx(abonnementSelect + where)
+	if err != nil {
+		return nil, err
+	}
+	return scanAbonnements(rows)
+}
+
+func scanAbonnements(rows *sqlx.Rows) ([]Abonnement, error) {
 	defer rows.Close()
 
-	var abonnements []Abonnement
-	var feeds = make(map[int64]Feed)
-	var feedChats = make(map[int64][]Chat)
+	feeds := make(map[int64]Feed)
+	feedChats := make(map[int64][]Chat)
+	var order []int64
 
 	for rows.Next() {
 		var chat Chat
 		var feed Feed
-		rows.Scan(&chat.ID, &chat.CreatedAt, &chat.Title,
-			&feed.ID, &feed.Url, &feed.LastEntry, &feed.CreatedAt, &feed.UpdatedAt)
-
-		feeds[feed.ID] = feed
-
-		if chats, ok := feedChats[feed.ID]; ok {
-			feedChats[feed.ID] = append(chats, chat)
-		} else {
-			feedChats[feed.ID] = []Chat{chat}
+		err := rows.Scan(&chat.ID, &chat.CreatedAt, &chat.Title,
+			&feed.ID, &feed.Url, &feed.LastEntry, &feed.CreatedAt, &feed.UpdatedAt,
+			&feed.ETag, &feed.LastModified, &feed.NextPollAt, &feed.LastPollAt,
+			&feed.ErrorCount, &feed.UnchangedCount, &feed.Disabled, &feed.DisabledReason)
+		if err != nil {
+			return nil, err
 		}
+
+		if _, seen := feeds[feed.ID]; !seen {
+			order = append(order, feed.ID)
+		}
+		feeds[feed.ID] = feed
+		feedChats[feed.ID] = append(feedChats[feed.ID], chat)
 	}
 
-	for feedId, feed := range feeds {
+	var abonnements []Abonnement
+	for _, feedId := range order {
 		abonnements = append(abonnements, Abonnement{
-			Feed:  feed,
+			Feed:  feeds[feedId],
 			Chats: feedChats[feedId],
 		})
 	}
 
-	return abonnements, nil
+	return abonnements, rows.Err()
 }
 
-func (db *Abonnements) SetLastEntry(feedUrl string, lastEntry *string) error {
+// SetFeedState writes the atomic cache set (etag + last_modified), the last seen
+// entry and the next poll schedule after a successful 200 response.
+func (db *Abonnements) SetFeedState(feedID int64, lastEntry, etag, lastModified *string, nextPollAt time.Time, errorCount, unchangedCount int) error {
 	const query = `UPDATE feeds
-SET feeds.last_entry = ?
-WHERE feeds.url = ?`
-
-	_, err := db.Exec(query, lastEntry, feedUrl)
+SET last_entry = ?, etag = ?, last_modified = ?, next_poll_at = ?, last_poll_at = NOW(),
+    error_count = ?, unchanged_count = ?
+WHERE id = ?`
+	_, err := db.Exec(query, lastEntry, etag, lastModified, nextPollAt, errorCount, unchangedCount, feedID)
 	return err
 }
 
-func (feedToCheck Feed) Check(lastEntry *string) (*gofeed.Feed, error) {
-	feed, err := gofeed.NewParser().ParseURL(feedToCheck.Url)
-	if err != nil {
-		return nil, err
-	}
+// Reschedule updates only the poll schedule and counters, preserving the cached
+// etag/last_modified (FRB010-016) — used for 304, rate-limiting and transient
+// errors.
+func (db *Abonnements) Reschedule(feedID int64, nextPollAt time.Time, errorCount, unchangedCount int) error {
+	const query = `UPDATE feeds
+SET next_poll_at = ?, last_poll_at = NOW(), error_count = ?, unchanged_count = ?
+WHERE id = ?`
+	_, err := db.Exec(query, nextPollAt, errorCount, unchangedCount, feedID)
+	return err
+}
 
-	if lastEntry != nil {
-		for i, item := range feed.Items {
-			if item.GUID == *lastEntry {
-				feed.Items = feed.Items[:i]
-				return feed, nil
-			}
-		}
-	}
+// SetFeedURL persists a permanent redirect target (FRB130/131).
+func (db *Abonnements) SetFeedURL(feedID int64, newURL string) error {
+	const query = `UPDATE feeds SET url = ? WHERE id = ?`
+	_, err := db.Exec(query, newURL, feedID)
+	return err
+}
 
-	return feed, nil
+// DisableFeed retires a feed that has gone away (FRB110-118).
+func (db *Abonnements) DisableFeed(feedID int64, reason string) error {
+	const query = `UPDATE feeds SET disabled = 1, disabled_reason = ?, next_poll_at = NULL WHERE id = ?`
+	_, err := db.Exec(query, reason, feedID)
+	return err
 }

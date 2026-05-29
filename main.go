@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Brawl345/rssbot/config"
+	"github.com/Brawl345/rssbot/fetcher"
 	"github.com/Brawl345/rssbot/handler"
 	_ "github.com/joho/godotenv/autoload"
 	"gopkg.in/telebot.v3"
@@ -26,6 +27,7 @@ func main() {
 
 	cfg := &config.Config{
 		Template: tmpl,
+		Poll:     config.GetPollConfig(),
 	}
 
 	db, err := storage.Connect()
@@ -56,10 +58,13 @@ func main() {
 	log.Printf("Logged in as @%s (%d)", bot.Me.Username, bot.Me.ID)
 
 	h := handler.Handler{
-		Bot:    bot,
-		Config: cfg,
-		DB:     db,
+		Bot:     bot,
+		Config:  cfg,
+		DB:      db,
+		Fetcher: fetcher.New(),
 	}
+
+	log.Printf("Feed fetcher User-Agent: %s", h.Fetcher.UserAgent())
 
 	adminId, err := strconv.ParseInt(os.Getenv("ADMIN_ID"), 10, 64)
 
@@ -93,7 +98,7 @@ func main() {
 
 	time.AfterFunc(5*time.Second, h.OnCheck)
 
-	channel := make(chan os.Signal)
+	channel := make(chan os.Signal, 1)
 	signal.Notify(channel, os.Interrupt, syscall.SIGTERM)
 	signal.Notify(channel, os.Interrupt, syscall.SIGKILL)
 	signal.Notify(channel, os.Interrupt, syscall.SIGINT)

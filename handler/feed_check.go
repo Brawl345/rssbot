@@ -27,7 +27,34 @@ const (
 	fetchTimeout = 35 * time.Second
 )
 
-var feedproxyRe = regexp.MustCompile("^https?://feedproxy.google.com/~r/(.+?)/.*")
+var (
+	feedproxyRe = regexp.MustCompile("^https?://feedproxy.google.com/~r/(.+?)/.*")
+	blankLineRe = regexp.MustCompile("(?m)^\\s*$[\r\n]*")
+)
+
+// compiledReplacement is a content filter with its regex compiled once per poll
+// cycle instead of once per feed item.
+type compiledReplacement struct {
+	re      *regexp.Regexp // nil for a literal replacement
+	literal string
+}
+
+func compileReplacements(replacements []storage.Replacement) []compiledReplacement {
+	compiled := make([]compiledReplacement, 0, len(replacements))
+	for _, r := range replacements {
+		if r.IsRegex {
+			re, err := regexp.Compile(r.Value)
+			if err != nil {
+				log.Printf("skipping invalid replacement regex %q: %s", r.Value, err)
+				continue
+			}
+			compiled = append(compiled, compiledReplacement{re: re})
+		} else {
+			compiled = append(compiled, compiledReplacement{literal: r.Value})
+		}
+	}
+	return compiled
+}
 
 type TemplateData struct {
 	Title      string
@@ -59,37 +86,43 @@ func (h *Handler) OnCheck() {
 	}
 
 	log.Printf("Polling %d due feed(s)", len(abonnements))
-	h.pollFeeds(abonnements, replacements)
+	h.pollFeeds(abonnements, compileReplacements(replacements))
 }
 
-// pollFeeds fetches the due feeds through a bounded worker pool while
-// serializing requests that target the same host (FRB033/034).
-func (h *Handler) pollFeeds(abonnements []storage.Abonnement, replacements []storage.Replacement) {
-	sem := make(chan struct{}, h.Config.Poll.Concurrency)
+// pollFeeds fetches the due feeds through a fixed worker pool while serializing
+// requests that target the same host (FRB033/034).
+func (h *Handler) pollFeeds(abonnements []storage.Abonnement, replacements []compiledReplacement) {
+	workers := h.Config.Poll.Concurrency
+	if workers < 1 {
+		workers = 1
+	}
+
 	hosts := &hostLocks{m: make(map[string]*sync.Mutex)}
+	jobs := make(chan storage.Abonnement)
 	var wg sync.WaitGroup
 
-	for _, abonnement := range abonnements {
-		abonnement := abonnement
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			lock := hosts.get(feedHost(abonnement.Feed.Url))
-			lock.Lock()
-			defer lock.Unlock()
-
-			h.pollFeed(abonnement, replacements)
+			for abonnement := range jobs {
+				lock := hosts.get(feedHost(abonnement.Feed.Url))
+				lock.Lock()
+				h.pollFeed(abonnement, replacements)
+				lock.Unlock()
+			}
 		}()
 	}
+
+	for _, abonnement := range abonnements {
+		jobs <- abonnement
+	}
+	close(jobs)
 
 	wg.Wait()
 }
 
-func (h *Handler) pollFeed(abonnement storage.Abonnement, replacements []storage.Replacement) {
+func (h *Handler) pollFeed(abonnement storage.Abonnement, replacements []compiledReplacement) {
 	feed := abonnement.Feed
 
 	var etag, lastModified string
@@ -112,11 +145,17 @@ func (h *Handler) pollFeed(abonnement storage.Abonnement, replacements []storage
 	// Permanent move: persist the new URL and stop polling the old one
 	// (FRB130/131/132).
 	if result.PermanentURL != "" {
-		if err := h.DB.Abonnements.SetFeedURL(feed.ID, result.PermanentURL); err != nil {
+		merged, err := h.DB.Abonnements.MoveFeedURL(feed.ID, result.PermanentURL)
+		if err != nil {
 			log.Printf("%s: could not update url to %s: %s", feed.Url, result.PermanentURL, err)
 		} else {
 			h.notify(abonnement, fmt.Sprintf("ℹ️ Feed wurde dauerhaft umgezogen:\n%s\n→ %s",
 				feed.Url, result.PermanentURL))
+			if merged {
+				// This feed row is gone; the existing feed at the target URL
+				// now owns these subscriptions and will deliver the content.
+				return
+			}
 			feed.Url = result.PermanentURL
 		}
 	}
@@ -138,7 +177,7 @@ func (h *Handler) pollFeed(abonnement storage.Abonnement, replacements []storage
 	}
 }
 
-func (h *Handler) handleOK(abonnement storage.Abonnement, feed storage.Feed, result *fetcher.Result, replacements []storage.Replacement) {
+func (h *Handler) handleOK(abonnement storage.Abonnement, feed storage.Feed, result *fetcher.Result, replacements []compiledReplacement) {
 	gfeed := result.Feed
 
 	var lastEntry *string
@@ -158,9 +197,9 @@ func (h *Handler) handleOK(abonnement storage.Abonnement, feed storage.Feed, res
 		templateData.FeedTitle = html.EscapeString(gfeed.Title)
 
 		if entry.Content != "" {
-			templateData.Content = processContent(entry.Content, &replacements)
+			templateData.Content = processContent(entry.Content, replacements)
 		} else if entry.Description != "" {
-			templateData.Content = processContent(entry.Description, &replacements)
+			templateData.Content = processContent(entry.Description, replacements)
 		}
 
 		if entry.Link != "" {
@@ -400,19 +439,18 @@ func (h *hostLocks) get(host string) *sync.Mutex {
 	return lock
 }
 
-func processContent(content string, replacements *[]storage.Replacement) string {
+func processContent(content string, replacements []compiledReplacement) string {
 	processed := html.UnescapeString(content)
 
-	for _, replacement := range *replacements {
-		if replacement.IsRegex {
-			re := regexp.MustCompile(replacement.Value)
-			processed = re.ReplaceAllString(processed, "")
+	for _, replacement := range replacements {
+		if replacement.re != nil {
+			processed = replacement.re.ReplaceAllString(processed, "")
 		} else {
-			processed = strings.ReplaceAll(processed, replacement.Value, "")
+			processed = strings.ReplaceAll(processed, replacement.literal, "")
 		}
 	}
 
-	processed = regexp.MustCompile("(?m)^\\s*$[\r\n]*").ReplaceAllString(processed, "")
+	processed = blankLineRe.ReplaceAllString(processed, "")
 	processed = strings.TrimSpace(processed)
 
 	if len(processed) > 270 {
@@ -424,22 +462,16 @@ func processContent(content string, replacements *[]storage.Replacement) string 
 
 func (h *Handler) sendText(chatId int64, text string, url string) error {
 	_, err := h.Bot.Send(telebot.ChatID(chatId), text, defaultSendOptions)
-
-	var floodError *telebot.FloodError
-
-	if err != nil {
-		if errors.As(err, &floodError) {
-			log.Printf("%s: Flood error, retrying after: %d seconds", url,
-				floodError.RetryAfter)
-			time.Sleep(time.Duration(err.(telebot.FloodError).RetryAfter) * time.Second)
-			err := h.sendText(chatId, text, url)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	// telebot returns FloodError by value, so match the value type.
+	var floodError telebot.FloodError
+	if errors.As(err, &floodError) {
+		log.Printf("%s: Flood error, retrying after: %d seconds", url, floodError.RetryAfter)
+		time.Sleep(time.Duration(floodError.RetryAfter) * time.Second)
+		return h.sendText(chatId, text, url)
+	}
+	return err
 }

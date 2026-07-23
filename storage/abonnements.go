@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -19,7 +20,7 @@ type (
 		GetDue() ([]Abonnement, error)
 		SetFeedState(feedID int64, lastEntry, etag, lastModified *string, nextPollAt time.Time, errorCount, unchangedCount int) error
 		Reschedule(feedID int64, nextPollAt time.Time, errorCount, unchangedCount int) error
-		SetFeedURL(feedID int64, newURL string) error
+		MoveFeedURL(feedID int64, newURL string) (bool, error)
 		DisableFeed(feedID int64, reason string) error
 	}
 
@@ -267,11 +268,47 @@ WHERE id = ?`
 	return err
 }
 
-// SetFeedURL persists a permanent redirect target (FRB130/131).
-func (db *Abonnements) SetFeedURL(feedID int64, newURL string) error {
-	const query = `UPDATE feeds SET url = ? WHERE id = ?`
-	_, err := db.Exec(query, newURL, feedID)
-	return err
+// MoveFeedURL persists a permanent redirect target (FRB130/131). If another feed
+// already occupies newURL (feeds.url is UNIQUE), this feed's subscriptions are
+// merged onto that existing feed instead and the old feed row is removed; the
+// returned bool reports whether such a merge happened.
+func (db *Abonnements) MoveFeedURL(feedID int64, newURL string) (bool, error) {
+	tx, err := db.BeginTxx(context.Background(), nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	var targetID int64
+	err = tx.Get(&targetID, "SELECT id FROM feeds WHERE url = ?", newURL)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if _, err := tx.Exec("UPDATE feeds SET url = ? WHERE id = ?", newURL, feedID); err != nil {
+			return false, err
+		}
+		return false, tx.Commit()
+	case err != nil:
+		return false, err
+	case targetID == feedID:
+		return false, tx.Commit()
+	}
+
+	// Repoint subscriptions onto the existing feed, dropping duplicates for
+	// chats already subscribed there, then delete the now-orphaned feed.
+	if _, err := tx.Exec("UPDATE IGNORE abonnements SET feed_id = ? WHERE feed_id = ?", targetID, feedID); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec("DELETE FROM abonnements WHERE feed_id = ?", feedID); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec("DELETE FROM feeds WHERE id = ?", feedID); err != nil {
+		return false, err
+	}
+	// Let the surviving feed pick up the merged subscribers on the next tick.
+	if _, err := tx.Exec("UPDATE feeds SET next_poll_at = NOW() WHERE id = ? AND disabled = 0", targetID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 // DisableFeed retires a feed that has gone away (FRB110-118).

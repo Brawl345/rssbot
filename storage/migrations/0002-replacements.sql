@@ -53,3 +53,7 @@ VALUES ('[←]', 0),
        ('The post.*appeared first on .+.', 1),
        ('http://www.serienjunkies.de/.*.html', 1),
        ('<.*?>', 1);
+
+-- +migrate Down
+
+DROP TABLE `replacements`;

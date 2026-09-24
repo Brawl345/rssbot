@@ -47,7 +47,7 @@ type Result struct {
 	FeedInterval time.Duration // ttl hint (FRB023/024), 0 if absent
 	SkipHours    []int         // RSS skipHours (FRB024)
 	SkipDays     []string      // RSS skipDays (FRB024)
-	PermanentURL string        // set on a 301/308 chain (FRB130/131)
+	PermanentURL string        // set on a 301/308 chain ending in 200/304 (FRB130/131)
 	Body         string        // snippet of an error body for the user (FRB101/120)
 }
 
@@ -121,7 +121,9 @@ func (f *Fetcher) Fetch(ctx context.Context, feedURL, etag, lastModified string)
 		}
 
 		result := &Result{Status: resp.StatusCode}
-		if permanentURL != "" && permanentURL != feedURL {
+		// Only report a move when the new location actually serves the feed.
+		succeeded := resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified
+		if succeeded && permanentURL != "" && permanentURL != feedURL {
 			result.PermanentURL = permanentURL
 		}
 

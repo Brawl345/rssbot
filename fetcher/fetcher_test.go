@@ -184,6 +184,24 @@ func TestPermanentRedirectReported(t *testing.T) {
 	}
 }
 
+func TestPermanentRedirectToErrorNotReported(t *testing.T) {
+	target := httptest.NewServer(http.NotFoundHandler())
+	defer target.Close()
+
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusMovedPermanently)
+	}))
+	defer src.Close()
+
+	res := fetch(t, New(), src.URL, "", "")
+	if res.PermanentURL != "" {
+		t.Errorf("PermanentURL = %q, want empty when target fails", res.PermanentURL)
+	}
+	if res.Status != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", res.Status)
+	}
+}
+
 func TestTemporaryRedirectNotPersisted(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(sampleRSS))

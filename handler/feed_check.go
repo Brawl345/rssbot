@@ -231,7 +231,7 @@ func (h *Handler) handleOK(abonnement storage.Abonnement, feed storage.Feed, res
 		var tpl bytes.Buffer
 		if err := h.Config.Template.Execute(&tpl, templateData); err != nil {
 			log.Printf("%s: %s", feed.Url, err)
-			return
+			continue
 		}
 
 		for _, chat := range abonnement.Chats {

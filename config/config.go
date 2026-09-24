@@ -82,6 +82,15 @@ func fileExists(fileName string) bool {
 	return false
 }
 
+// LoadTemplate loads the post template from POST_TEMPLATE. Without it,
+// post.gohtml in the working directory or the built-in default is used.
+func LoadTemplate() (*template.Template, error) {
+	if path := os.Getenv("POST_TEMPLATE"); path != "" {
+		return template.ParseFiles(path)
+	}
+	return GetTemplate("post.gohtml")
+}
+
 func GetTemplate(path string) (*template.Template, error) {
 	if fileExists(path) {
 		return template.ParseFiles(path)

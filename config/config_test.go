@@ -1,6 +1,9 @@
 package config
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -71,5 +74,45 @@ func TestGetTemplateDefault(t *testing.T) {
 	}
 	if tmpl.Name() != "post" {
 		t.Errorf("template name = %q, want post", tmpl.Name())
+	}
+}
+
+func TestLoadTemplateFromEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "custom.gohtml")
+	if err := os.WriteFile(path, []byte("[#RSS] {{.Title}}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("POST_TEMPLATE", path)
+
+	tmpl, err := LoadTemplate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := tmpl.Execute(&out, struct{ Title string }{"Hallo"}); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "[#RSS] Hallo" {
+		t.Errorf("rendered %q", out.String())
+	}
+}
+
+func TestLoadTemplateMissingFileFails(t *testing.T) {
+	t.Setenv("POST_TEMPLATE", filepath.Join(t.TempDir(), "missing.gohtml"))
+	if _, err := LoadTemplate(); err == nil {
+		t.Error("an explicitly configured but missing template must be an error")
+	}
+}
+
+func TestLoadTemplateDefault(t *testing.T) {
+	t.Setenv("POST_TEMPLATE", "")
+	t.Chdir(t.TempDir())
+
+	tmpl, err := LoadTemplate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tmpl.Name() != "post" {
+		t.Errorf("template name = %q, want built-in post", tmpl.Name())
 	}
 }

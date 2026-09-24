@@ -18,7 +18,7 @@ The bot's language is German, but it should be self-explanatory.
 
 1. Download binary for your system from Releases or build it yourself
 2. Copy ".env.example" to ".env" and fill it in
-3. (Optional) Create a `post.gohtml` with a custom Go HTML template that will be used for posts (see below)
+3. (Optional) Create a `post.gohtml` with a custom Go template that will be used for posts (see below)
 4. Run and done! Database migrations are applied automatically.
 
 ## How polling works
@@ -64,7 +64,7 @@ Disabled feeds are marked with 🚫 in `/rss`. To enable one again, simply subsc
 
 ### Use your own template
 
-The bot reads the `post.gohtml` from the same directory and uses it as a [Go template](https://pkg.go.dev/text/template) where it inserts the data. Take a look inside the [handler/feed_check.go](handler/feed_check.go) file (the `TemplateData` struct) to see all available fields. You can find the default template inside the [config/config.go](config/config.go) file. [Limited HTML](https://core.telegram.org/bots/api#html-style) is supported and all fields are sanitized with HTML tags removed and "replacements" applied. 
+The bot reads the file set in `POST_TEMPLATE` (or `post.gohtml` from the working directory, e.g. `/app/post.gohtml` in Docker) and uses it as a [Go template](https://pkg.go.dev/text/template) where it inserts the data. Take a look inside the [handler/feed_check.go](handler/feed_check.go) file (the `TemplateData` struct) to see all available fields. You can find the default template inside the [config/config.go](config/config.go) file. [Limited HTML](https://core.telegram.org/bots/api#html-style) is supported and all fields are sanitized with HTML tags removed and "replacements" applied. 
 
 Example:
 

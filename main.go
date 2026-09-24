@@ -20,7 +20,7 @@ import (
 )
 
 func main() {
-	tmpl, err := config.GetTemplate("post.gohtml")
+	tmpl, err := config.LoadTemplate()
 	if err != nil {
 		log.Fatal("Invalid template: ", err)
 	}

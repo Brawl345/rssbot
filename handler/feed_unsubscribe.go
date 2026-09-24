@@ -39,7 +39,11 @@ func (h *Handler) OnUnsubscribe(c telebot.Context) error {
 		chatId = chatInfo.ID
 	}
 
-	exists, _ := h.DB.Abonnements.ExistsById(chatId, feedId)
+	exists, err := h.DB.Abonnements.ExistsById(chatId, feedId)
+	if err != nil {
+		log.Println(err)
+		return c.Send("❌ Beim Deabonnieren ist ein Fehler aufgetreten.", defaultSendOptions)
+	}
 
 	if !exists {
 		return c.Send("❌ Dieser Feed wurde nicht abonniert.", defaultSendOptions)

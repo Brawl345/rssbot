@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Brawl345/rssbot/config"
+	"github.com/Brawl345/rssbot/fetcher"
 	"github.com/Brawl345/rssbot/handler"
 	_ "github.com/joho/godotenv/autoload"
 	"gopkg.in/telebot.v3"
@@ -19,13 +20,14 @@ import (
 )
 
 func main() {
-	tmpl, err := config.GetTemplate("post.gohtml")
+	tmpl, err := config.LoadTemplate()
 	if err != nil {
 		log.Fatal("Invalid template: ", err)
 	}
 
 	cfg := &config.Config{
 		Template: tmpl,
+		Poll:     config.GetPollConfig(),
 	}
 
 	db, err := storage.Connect()
@@ -55,13 +57,17 @@ func main() {
 
 	log.Printf("Logged in as @%s (%d)", bot.Me.Username, bot.Me.ID)
 
+	adminId, err := strconv.ParseInt(os.Getenv("ADMIN_ID"), 10, 64)
+
 	h := handler.Handler{
-		Bot:    bot,
-		Config: cfg,
-		DB:     db,
+		Bot:     bot,
+		Config:  cfg,
+		DB:      db,
+		Fetcher: fetcher.New(),
+		AdminID: adminId,
 	}
 
-	adminId, err := strconv.ParseInt(os.Getenv("ADMIN_ID"), 10, 64)
+	log.Printf("Feed fetcher User-Agent: %s", h.Fetcher.UserAgent())
 
 	if err != nil {
 		// No admin = unsupported.
@@ -93,10 +99,8 @@ func main() {
 
 	time.AfterFunc(5*time.Second, h.OnCheck)
 
-	channel := make(chan os.Signal)
+	channel := make(chan os.Signal, 1)
 	signal.Notify(channel, os.Interrupt, syscall.SIGTERM)
-	signal.Notify(channel, os.Interrupt, syscall.SIGKILL)
-	signal.Notify(channel, os.Interrupt, syscall.SIGINT)
 	go func() {
 		<-channel
 		log.Println("Stopping...")

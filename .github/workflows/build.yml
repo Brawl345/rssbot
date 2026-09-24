@@ -3,13 +3,73 @@ on:
   - push
   - pull_request
 
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 env:
   NAME: rssbot
 
 jobs:
+  test:
+    name: test (MariaDB ${{ matrix.mariadb.version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+    strategy:
+      fail-fast: false
+      matrix:
+        mariadb:
+          - version: '11.4' # nixpkgs default
+            image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
+          - version: '12.3' # LTS
+            image: mariadb:12.3@sha256:805c8e104bd563d5bfa24fadd3f31cd419ea859cb5277f32b5dbf2db714f9ed1
+          - version: '13.0' # latest, used by docker-compose.yml
+            image: mariadb:13.0@sha256:d4fdec0510ad498e4f3127da30a99df3745bd6d5e611ae6ac5f76403d9284a8d
+    services:
+      mariadb:
+        image: ${{ matrix.mariadb.image }}
+        env:
+          MARIADB_DATABASE: rssbot_test
+          MARIADB_USER: rssbot
+          MARIADB_PASSWORD: rssbot
+          MARIADB_RANDOM_ROOT_PASSWORD: '1'
+          # Differs from the runner's UTC to catch time zone bugs.
+          TZ: Asia/Tokyo
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        env:
+          RSSBOT_TEST_DSN: rssbot:rssbot@tcp(127.0.0.1:3306)/rssbot_test?charset=utf8mb4&parseTime=True&loc=Local
+        run: go test -race ./...
+
   build:
     name: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
     strategy:
       matrix:
         GOOS: [windows, linux, darwin]
@@ -24,59 +84,64 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: 'go.mod'
+          go-version: stable
 
       - name: Build
         env:
           GOOS: ${{ matrix.GOOS }}
           GOARCH: ${{ matrix.GOARCH }}
-        run: go build -ldflags="-s -w" -o dist/$NAME-$GOOS-$GOARCH
+        run: go build -ldflags="-s -w" -o "dist/${NAME}-${GOOS}-${GOARCH}"
 
       - name: Rename binaries (Windows)
         if: matrix.GOOS == 'windows'
-        run: for x in dist/$NAME-windows-*; do mv $x $x.exe; done
+        run: for x in dist/"${NAME}"-windows-*; do mv "$x" "$x.exe"; done
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{env.NAME}}-${{ matrix.GOOS }}-${{ matrix.GOARCH }}-${{github.sha}}
+          name: ${{ env.NAME }}-${{ matrix.GOOS }}-${{ matrix.GOARCH }}-${{ github.sha }}
           path: dist/*
           retention-days: 90
 
   docker:
     name: docker
+    needs: test
     runs-on: ubuntu-latest
     permissions:
-      packages: write
-      contents: read
+      contents: read # checkout
+      packages: write # push image to ghcr.io
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build image
-        run: docker build . --file Dockerfile --tag $NAME --label "runnumber=${GITHUB_RUN_ID}"
+        run: docker build . --file Dockerfile --tag "$NAME" --build-arg VERSION="${GITHUB_SHA::7}" --label "runnumber=${GITHUB_RUN_ID}"
 
       - name: Log in to registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       - name: Push image
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
         run: |
-          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$NAME
-
-          # This changes all uppercase characters to lowercase.
-          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
-          # This strips the git ref prefix from the version.
-          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-          # This strips the "v" prefix from the tag name.
-          [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
-          # This uses the Docker `latest` tag convention.
-          [ "$VERSION" == "master" ] && VERSION=latest
-          echo IMAGE_ID=$IMAGE_ID
-          echo VERSION=$VERSION
-          docker tag $NAME $IMAGE_ID:$VERSION
-          docker push $IMAGE_ID:$VERSION
+          image_id="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${NAME}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version=latest
+          fi
+          echo "Pushing ${image_id}:${version}"
+          docker tag "$NAME" "${image_id}:${version}"
+          docker push "${image_id}:${version}"

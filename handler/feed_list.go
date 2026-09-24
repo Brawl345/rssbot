@@ -56,10 +56,10 @@ func (h *Handler) OnList(c telebot.Context) error {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("<b>%s</b> hat abonniert:\n", html.EscapeString(chatTitle)))
+	fmt.Fprintf(&sb, "<b>%s</b> hat abonniert:\n", html.EscapeString(chatTitle))
 
 	for _, link := range links {
-		sb.WriteString(fmt.Sprintf("<b>%d)</b> %s\n", link.ID, html.EscapeString(link.Url)))
+		fmt.Fprintf(&sb, "<b>%d)</b> %s%s\n", link.ID, html.EscapeString(link.Url), feedStatus(link))
 	}
 
 	return c.Send(sb.String(), defaultSendOptions)

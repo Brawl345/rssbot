@@ -23,11 +23,16 @@
     {
 
       nixosModules = {
-        default = ./module.nix;
+        default =
+          { lib, pkgs, ... }:
+          {
+            imports = [ ./module.nix ];
+            services.rssbot.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          };
       };
 
       overlays.default = final: prev: {
-        rssbot = self.packages.${prev.system}.default;
+        rssbot = self.packages.${final.stdenv.hostPlatform.system}.default;
       };
 
       devShells = forAllSystems (pkgs: {
@@ -39,6 +44,16 @@
         };
       });
 
+      checks =
+        nixpkgs.lib.genAttrs
+          [
+            "x86_64-linux"
+            "aarch64-linux"
+          ]
+          (system: {
+            nixos-module = nixpkgs.legacyPackages.${system}.testers.runNixOSTest (import ./nixos-test.nix self);
+          });
+
       packages = forAllSystems (pkgs: {
         rssbot = pkgs.buildGoModule {
           pname = "rssbot";
@@ -47,11 +62,12 @@
 
           # Update the hash if go dependencies change!
           # vendorHash = pkgs.lib.fakeHash;
-          vendorHash = "sha256-mo30V7ISVFY8Rl3yXChP6pbehV9hTPH3UlBLDb1dzNE=";
+          vendorHash = "sha256-EQOlQCllo/nwJTv/ZhlR/ORKj1Kt6+mFHPIbEFE3QvI=";
 
           ldflags = [
             "-s"
             "-w"
+            "-X github.com/Brawl345/rssbot/fetcher.Version=${version}"
           ];
 
           meta = {
@@ -62,7 +78,7 @@
           };
         };
 
-        default = self.packages.${pkgs.system}.rssbot;
+        default = self.packages.${pkgs.stdenv.hostPlatform.system}.rssbot;
       });
     };
 }

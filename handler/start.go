@@ -16,7 +16,8 @@ func (h *Handler) OnStart(c telebot.Context) error {
 	sb.WriteString("<b>/repl_add</b> <i>String</i>: Ersetzung hinzufügen\n")
 	sb.WriteString("<b>/repl_add_re</b> <i>RegEx</i>: RegEx-Ersetzung hinzufügen\n")
 	sb.WriteString("<b>/repl_del</b> <i>Ersetzungs-ID</i>: Ersetzung löschen\n\n")
-	sb.WriteString("<i>[Chat]</i> ist ein optionales Argument mit dem <code>@Kanalnamen</code>.")
+	sb.WriteString("<i>[Chat]</i> ist ein optionales Argument mit dem <code>@Kanalnamen</code>.\n")
+	sb.WriteString("Deaktivierte Feeds werden durch erneutes <b>/sub</b> wieder aktiviert.")
 
 	return c.Send(sb.String(), defaultSendOptions)
 }

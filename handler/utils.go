@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"fmt"
+	"html"
+
+	"github.com/Brawl345/rssbot/storage"
 	"github.com/mmcdole/gofeed"
 	"gopkg.in/telebot.v3"
 )
@@ -21,4 +25,11 @@ func reverse(s []*gofeed.Item) []*gofeed.Item {
 	}
 
 	return a
+}
+
+func feedStatus(feed storage.Feed) string {
+	if !feed.Disabled {
+		return ""
+	}
+	return fmt.Sprintf(" 🚫 <i>deaktiviert: %s</i>", html.EscapeString(feed.DisabledReason.String))
 }

@@ -31,3 +31,10 @@ CREATE TABLE IF NOT EXISTS `abonnements`
     CONSTRAINT `FK_abonnements_feeds` FOREIGN KEY (`feed_id`) REFERENCES `feeds` (`id`) ON UPDATE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
+
+
+-- +migrate Down
+
+DROP TABLE `abonnements`;
+DROP TABLE `feeds`;
+DROP TABLE `chats`;

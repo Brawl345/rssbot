@@ -1,5 +1,6 @@
 *
 !config/
+!fetcher/
 !handler/
 !storage/
 !go.mod

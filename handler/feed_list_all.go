@@ -27,11 +27,10 @@ func (h *Handler) OnListAll(c telebot.Context) error {
 	sb := strings.Builder{}
 
 	for _, abonnement := range abonnements {
-		sb.WriteString(fmt.Sprintf("<b>%d)</b> %s\n", abonnement.Feed.ID, abonnement.Feed.Url))
+		fmt.Fprintf(&sb, "<b>%d)</b> %s%s\n", abonnement.ID, html.EscapeString(abonnement.Url), feedStatus(abonnement.Feed))
 
 		for _, chat := range abonnement.Chats {
-			sb.WriteString(fmt.Sprintf("    <code>%d</code> (%s)\n", chat.ID,
-				html.EscapeString(chat.Title)))
+			fmt.Fprintf(&sb, "    <code>%d</code> (%s)\n", chat.ID, html.EscapeString(chat.Title))
 		}
 
 		sb.WriteString("\n")

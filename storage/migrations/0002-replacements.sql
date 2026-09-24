@@ -3,7 +3,7 @@
 CREATE TABLE `replacements`
 (
     `id`         INT(11)      NOT NULL AUTO_INCREMENT,
-    `value`      VARCHAR(255) NOT NULL,
+    `value`      VARCHAR(255) NOT NULL COLLATE utf8mb4_bin,
     `is_regex`   TINYINT(1)   NOT NULL DEFAULT '0',
     `created_at` DATETIME     NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (`id`) USING BTREE,
@@ -53,3 +53,7 @@ VALUES ('[←]', 0),
        ('The post.*appeared first on .+.', 1),
        ('http://www.serienjunkies.de/.*.html', 1),
        ('<.*?>', 1);
+
+-- +migrate Down
+
+DROP TABLE `replacements`;

@@ -29,7 +29,7 @@ func (h *Handler) OnListReplacements(c telebot.Context) error {
 	sb := strings.Builder{}
 
 	for _, replacement := range replacements {
-		sb.WriteString(fmt.Sprintf("<b>%d)</b> <code>%s</code>", replacement.ID, html.EscapeString(replacement.Value)))
+		fmt.Fprintf(&sb, "<b>%d)</b> <code>%s</code>", replacement.ID, html.EscapeString(replacement.Value))
 		if replacement.IsRegex {
 			sb.WriteString(" <i>(RegEx)</i>")
 		}

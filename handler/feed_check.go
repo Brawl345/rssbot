@@ -103,7 +103,7 @@ func (h *Handler) pollFeeds(abonnements []storage.Abonnement, replacements []com
 	groups := make(map[string][]storage.Abonnement)
 	var hosts []string
 	for _, abonnement := range abonnements {
-		host := feedHost(abonnement.Feed.Url)
+		host := feedHost(abonnement.Url)
 		if _, ok := groups[host]; !ok {
 			hosts = append(hosts, host)
 		}
@@ -371,8 +371,8 @@ func (h *Handler) notify(abonnement storage.Abonnement, text string) {
 	if h.AdminID == 0 {
 		return
 	}
-	if err := h.sendText(h.AdminID, text, abonnement.Feed.Url); err != nil {
-		log.Printf("%s: notify failed: %s", abonnement.Feed.Url, err)
+	if err := h.sendText(h.AdminID, text, abonnement.Url); err != nil {
+		log.Printf("%s: notify failed: %s", abonnement.Url, err)
 	}
 }
 

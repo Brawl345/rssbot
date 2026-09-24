@@ -164,8 +164,7 @@ func TestRetryAfterParsed(t *testing.T) {
 }
 
 func TestPermanentRedirectReported(t *testing.T) {
-	var target *httptest.Server
-	target = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(sampleRSS))
 	}))
 	defer target.Close()

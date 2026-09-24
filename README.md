@@ -21,6 +21,40 @@ The bot's language is German, but it should be self-explanatory.
 3. (Optional) Create a `post.gohtml` with a custom Go template that will be used for posts (see below)
 4. Run and done! Database migrations are applied automatically.
 
+### NixOS
+
+The flake provides a NixOS module. By default it creates a local MariaDB database and connects via Unix socket.
+
+```nix
+{
+  inputs.rssbot.url = "github:Brawl345/rssbot";
+
+  outputs = { nixpkgs, rssbot, ... }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      modules = [
+        rssbot.nixosModules.default
+        {
+          services.rssbot = {
+            enable = true;
+            adminId = 1337;
+            botTokenFile = "/run/secrets/rssbot-token";
+
+            # Optional
+            templateFile = ./post.gohtml; # or: template = "<b>{{.Title}}</b> ...";
+            poll = {
+              interval = "5m";
+              adaptive = false;
+            };
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
+To use an existing database instead, set `database.createLocally = false` together with `database.host` and `database.passwordFile`. `nix flake check` runs a VM test of the module.
+
 ## How polling works
 
 The bot does not fetch all feeds at once. Every feed has its own "next poll" time stored in the database. Every `POLL_TICK` (default: 30 seconds) the bot fetches the feeds that are due and then calculates their next poll time. Because the schedule lives in the database, restarting the bot does not trigger a re-download of all feeds.
@@ -62,7 +96,7 @@ The admin gets a private message when a feed is disabled, moved or rate limited.
 
 Disabled feeds are marked with 🚫 in `/rss`. To enable one again, simply subscribe to it again with `/sub`.
 
-### Use your own template
+## Use your own template
 
 The bot reads the file set in `POST_TEMPLATE` (or `post.gohtml` from the working directory, e.g. `/app/post.gohtml` in Docker) and uses it as a [Go template](https://pkg.go.dev/text/template) where it inserts the data. Take a look inside the [handler/feed_check.go](handler/feed_check.go) file (the `TemplateData` struct) to see all available fields. You can find the default template inside the [config/config.go](config/config.go) file. [Limited HTML](https://core.telegram.org/bots/api#html-style) is supported and all fields are sanitized with HTML tags removed and "replacements" applied. 
 

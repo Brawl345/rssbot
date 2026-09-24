@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Brawl345/rssbot/storage"
 	"gopkg.in/telebot.v3"
 )
 
@@ -106,9 +107,9 @@ func (h *Handler) OnSubscribe(c telebot.Context) error {
 	// poll is already conditional.
 	etag := nullableString(result.ETag)
 	lastModified := nullableString(result.LastModified)
-	nextPollAt := time.Now().Add(h.Config.Poll.Interval)
+	hints := storage.PollHints{Interval: result.FeedInterval, SkipHours: result.SkipHours, SkipDays: result.SkipDays}
 
-	err = h.DB.Abonnements.Create(chatId, chatTitle, feedUrl, lastEntry, etag, lastModified, nextPollAt)
+	err = h.DB.Abonnements.Create(chatId, chatTitle, feedUrl, lastEntry, etag, lastModified, hints, h.nextPoll(0, result))
 	if err != nil {
 		log.Println(err)
 		return c.Send("❌ Beim Abonnieren des Feeds ist ein Fehler aufgetreten.", defaultSendOptions)

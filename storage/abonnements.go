@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -11,14 +13,14 @@ import (
 
 type (
 	AbonnementStorage interface {
-		Create(chatId int64, chatTitle string, feedUrl string, lastEntry, etag, lastModified *string, nextPollAt time.Time) error
+		Create(chatId int64, chatTitle string, feedUrl string, lastEntry, etag, lastModified *string, hints PollHints, nextPollAt time.Time) error
 		Delete(chatId int64, feedId int64) error
 		ExistsByFeedUrl(chatId int64, feedUrl string) (bool, error)
 		ExistsById(chatId int64, feedId int64) (bool, error)
 		GetByUser(chatId int64) ([]Feed, error)
 		GetAll() ([]Abonnement, error)
 		GetDue() ([]Abonnement, error)
-		SetFeedState(feedID int64, lastEntry, etag, lastModified *string, nextPollAt time.Time, errorCount, unchangedCount int) error
+		SetFeedState(feedID int64, lastEntry, etag, lastModified *string, hints PollHints, nextPollAt time.Time, errorCount, unchangedCount int) error
 		Reschedule(feedID int64, nextPollAt time.Time, errorCount, unchangedCount int) error
 		MoveFeedURL(feedID int64, newURL string) (bool, error)
 		DisableFeed(feedID int64, reason string) error
@@ -53,10 +55,54 @@ type (
 		UnchangedCount int            `db:"unchanged_count"`
 		Disabled       bool           `db:"disabled"`
 		DisabledReason sql.NullString `db:"disabled_reason"`
+		FeedInterval   int            `db:"feed_interval"`
+		SkipHours      sql.NullString `db:"skip_hours"`
+		SkipDays       sql.NullString `db:"skip_days"`
+	}
+
+	// PollHints are the polling hints a feed declares in its body (ttl,
+	// skipHours, skipDays). They are persisted so they still apply after a 304.
+	PollHints struct {
+		Interval  time.Duration
+		SkipHours []int
+		SkipDays  []string
 	}
 )
 
-func (db *Abonnements) Create(chatId int64, chatTitle string, feedUrl string, lastEntry, etag, lastModified *string, nextPollAt time.Time) error {
+// Hints decodes the persisted polling hints of a feed.
+func (f Feed) Hints() PollHints {
+	hints := PollHints{Interval: time.Duration(f.FeedInterval) * time.Second}
+	if f.SkipHours.Valid {
+		for _, v := range strings.Split(f.SkipHours.String, ",") {
+			if n, err := strconv.Atoi(v); err == nil {
+				hints.SkipHours = append(hints.SkipHours, n)
+			}
+		}
+	}
+	if f.SkipDays.Valid && f.SkipDays.String != "" {
+		hints.SkipDays = strings.Split(f.SkipDays.String, ",")
+	}
+	return hints
+}
+
+func (p PollHints) encode() (int, *string, *string) {
+	var skipHours, skipDays *string
+	if len(p.SkipHours) > 0 {
+		parts := make([]string, len(p.SkipHours))
+		for i, h := range p.SkipHours {
+			parts[i] = strconv.Itoa(h)
+		}
+		joined := strings.Join(parts, ",")
+		skipHours = &joined
+	}
+	if len(p.SkipDays) > 0 {
+		joined := strings.Join(p.SkipDays, ",")
+		skipDays = &joined
+	}
+	return int(p.Interval / time.Second), skipHours, skipDays
+}
+
+func (db *Abonnements) Create(chatId int64, chatTitle string, feedUrl string, lastEntry, etag, lastModified *string, hints PollHints, nextPollAt time.Time) error {
 	tx, err := db.BeginTxx(context.Background(), nil)
 	if err != nil {
 		return err
@@ -70,8 +116,10 @@ func (db *Abonnements) Create(chatId int64, chatTitle string, feedUrl string, la
 
 	if err != nil {
 		// Feed does not exist yet, will be created
-		const insertFeedQuery = "INSERT INTO feeds (url, last_entry, etag, last_modified, next_poll_at) VALUES (?, ?, ?, ?, ?)"
-		result, err := tx.Exec(insertFeedQuery, feedUrl, lastEntry, etag, lastModified, nextPollAt)
+		const insertFeedQuery = `INSERT INTO feeds (url, last_entry, etag, last_modified, feed_interval, skip_hours, skip_days, next_poll_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		interval, skipHours, skipDays := hints.encode()
+		result, err := tx.Exec(insertFeedQuery, feedUrl, lastEntry, etag, lastModified, interval, skipHours, skipDays, nextPollAt)
 		if err != nil {
 			return err
 		}
@@ -185,7 +233,8 @@ WHERE chats.id = ?`
 const abonnementSelect = `SELECT chats.id, chats.created_at, chats.title,
 feeds.id, feeds.url, feeds.last_entry, feeds.created_at, feeds.updated_at,
 feeds.etag, feeds.last_modified, feeds.next_poll_at, feeds.last_poll_at,
-feeds.error_count, feeds.unchanged_count, feeds.disabled, feeds.disabled_reason
+feeds.error_count, feeds.unchanged_count, feeds.disabled, feeds.disabled_reason,
+feeds.feed_interval, feeds.skip_hours, feeds.skip_days
 FROM abonnements
 JOIN chats ON abonnements.chat_id = chats.id
 JOIN feeds ON abonnements.feed_id = feeds.id`
@@ -225,7 +274,8 @@ func scanAbonnements(rows *sqlx.Rows) ([]Abonnement, error) {
 		err := rows.Scan(&chat.ID, &chat.CreatedAt, &chat.Title,
 			&feed.ID, &feed.Url, &feed.LastEntry, &feed.CreatedAt, &feed.UpdatedAt,
 			&feed.ETag, &feed.LastModified, &feed.NextPollAt, &feed.LastPollAt,
-			&feed.ErrorCount, &feed.UnchangedCount, &feed.Disabled, &feed.DisabledReason)
+			&feed.ErrorCount, &feed.UnchangedCount, &feed.Disabled, &feed.DisabledReason,
+			&feed.FeedInterval, &feed.SkipHours, &feed.SkipDays)
 		if err != nil {
 			return nil, err
 		}
@@ -249,13 +299,16 @@ func scanAbonnements(rows *sqlx.Rows) ([]Abonnement, error) {
 }
 
 // SetFeedState writes the atomic cache set (etag + last_modified), the last seen
-// entry and the next poll schedule after a successful 200 response.
-func (db *Abonnements) SetFeedState(feedID int64, lastEntry, etag, lastModified *string, nextPollAt time.Time, errorCount, unchangedCount int) error {
+// entry, the feed's polling hints and the next poll schedule after a successful
+// 200 response.
+func (db *Abonnements) SetFeedState(feedID int64, lastEntry, etag, lastModified *string, hints PollHints, nextPollAt time.Time, errorCount, unchangedCount int) error {
 	const query = `UPDATE feeds
-SET last_entry = ?, etag = ?, last_modified = ?, next_poll_at = ?, last_poll_at = ?,
-    error_count = ?, unchanged_count = ?
+SET last_entry = ?, etag = ?, last_modified = ?, feed_interval = ?, skip_hours = ?, skip_days = ?,
+    next_poll_at = ?, last_poll_at = ?, error_count = ?, unchanged_count = ?
 WHERE id = ?`
-	_, err := db.Exec(query, lastEntry, etag, lastModified, nextPollAt, time.Now(), errorCount, unchangedCount, feedID)
+	interval, skipHours, skipDays := hints.encode()
+	_, err := db.Exec(query, lastEntry, etag, lastModified, interval, skipHours, skipDays,
+		nextPollAt, time.Now(), errorCount, unchangedCount, feedID)
 	return err
 }
 

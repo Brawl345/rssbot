@@ -173,6 +173,8 @@ func (h *Handler) pollFeed(abonnement storage.Abonnement, replacements []compile
 	case result.Status == 200 && result.Feed != nil:
 		h.handleOK(abonnement, feed, result, replacements)
 	case result.NotModified:
+		hints := feed.Hints()
+		result.FeedInterval, result.SkipHours, result.SkipDays = hints.Interval, hints.SkipHours, hints.SkipDays
 		next := h.nextPoll(feed.UnchangedCount+1, result)
 		if err := h.DB.Abonnements.Reschedule(feed.ID, next, 0, feed.UnchangedCount+1); err != nil {
 			log.Printf("%s: reschedule failed: %s", feed.Url, err)
@@ -257,6 +259,7 @@ func (h *Handler) handleOK(abonnement storage.Abonnement, feed storage.Feed, res
 	next := h.nextPoll(unchanged, result)
 	err := h.DB.Abonnements.SetFeedState(feed.ID, newLastEntry,
 		nullableString(result.ETag), nullableString(result.LastModified),
+		storage.PollHints{Interval: result.FeedInterval, SkipHours: result.SkipHours, SkipDays: result.SkipDays},
 		next, 0, unchanged)
 	if err != nil {
 		log.Printf("%s: could not save state: %s", feed.Url, err)

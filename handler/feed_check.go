@@ -89,33 +89,42 @@ func (h *Handler) OnCheck() {
 	h.pollFeeds(abonnements, compileReplacements(replacements))
 }
 
-// pollFeeds fetches the due feeds through a fixed worker pool while serializing
-// requests that target the same host (FRB033/034).
+// pollFeeds groups the due feeds by host and hands each group to a worker, so
+// requests to the same host are serialized (FRB033/034) without idle workers
+// blocking on a busy host.
 func (h *Handler) pollFeeds(abonnements []storage.Abonnement, replacements []compiledReplacement) {
 	workers := h.Config.Poll.Concurrency
 	if workers < 1 {
 		workers = 1
 	}
 
-	hosts := &hostLocks{m: make(map[string]*sync.Mutex)}
-	jobs := make(chan storage.Abonnement)
+	groups := make(map[string][]storage.Abonnement)
+	var hosts []string
+	for _, abonnement := range abonnements {
+		host := feedHost(abonnement.Feed.Url)
+		if _, ok := groups[host]; !ok {
+			hosts = append(hosts, host)
+		}
+		groups[host] = append(groups[host], abonnement)
+	}
+
+	jobs := make(chan []storage.Abonnement)
 	var wg sync.WaitGroup
 
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for abonnement := range jobs {
-				lock := hosts.get(feedHost(abonnement.Feed.Url))
-				lock.Lock()
-				h.pollFeed(abonnement, replacements)
-				lock.Unlock()
+			for group := range jobs {
+				for _, abonnement := range group {
+					h.pollFeed(abonnement, replacements)
+				}
 			}
 		}()
 	}
 
-	for _, abonnement := range abonnements {
-		jobs <- abonnement
+	for _, host := range hosts {
+		jobs <- groups[host]
 	}
 	close(jobs)
 
@@ -421,22 +430,6 @@ func containsDay(days []string, day string) bool {
 		}
 	}
 	return false
-}
-
-type hostLocks struct {
-	mu sync.Mutex
-	m  map[string]*sync.Mutex
-}
-
-func (h *hostLocks) get(host string) *sync.Mutex {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if lock, ok := h.m[host]; ok {
-		return lock
-	}
-	lock := &sync.Mutex{}
-	h.m[host] = lock
-	return lock
 }
 
 func processContent(content string, replacements []compiledReplacement) string {

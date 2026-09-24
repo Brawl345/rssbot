@@ -45,7 +45,7 @@ func TestFetchSetsHeadersAndParses(t *testing.T) {
 		w.Header().Set("Etag", `"abc"`)
 		w.Header().Set("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
 		w.Header().Set("Cache-Control", "max-age=1800")
-		w.Write([]byte(sampleRSS))
+		_, _ = w.Write([]byte(sampleRSS))
 	}))
 	defer srv.Close()
 
@@ -89,7 +89,7 @@ func TestFetchSetsHeadersAndParses(t *testing.T) {
 
 func TestSyndicationHintIgnored(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(strings.Replace(sampleRSS, "<ttl>90</ttl>", "", 1)))
+		_, _ = w.Write([]byte(strings.Replace(sampleRSS, "<ttl>90</ttl>", "", 1)))
 	}))
 	defer srv.Close()
 
@@ -147,7 +147,7 @@ func TestRetryAfterParsed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "120")
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("slow down"))
+		_, _ = w.Write([]byte("slow down"))
 	}))
 	defer srv.Close()
 
@@ -166,7 +166,7 @@ func TestRetryAfterParsed(t *testing.T) {
 func TestPermanentRedirectReported(t *testing.T) {
 	var target *httptest.Server
 	target = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(sampleRSS))
+		_, _ = w.Write([]byte(sampleRSS))
 	}))
 	defer target.Close()
 
@@ -204,7 +204,7 @@ func TestPermanentRedirectToErrorNotReported(t *testing.T) {
 
 func TestTemporaryRedirectNotPersisted(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(sampleRSS))
+		_, _ = w.Write([]byte(sampleRSS))
 	}))
 	defer target.Close()
 
@@ -251,7 +251,7 @@ func TestRedirectToUnsupportedSchemeRefused(t *testing.T) {
 
 func TestNonFeedRejected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("<html><body>not a feed</body></html>"))
+		_, _ = w.Write([]byte("<html><body>not a feed</body></html>"))
 	}))
 	defer srv.Close()
 

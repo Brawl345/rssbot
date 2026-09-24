@@ -97,7 +97,11 @@ func (h *Handler) OnSubscribe(c telebot.Context) error {
 		log.Printf("subscribe %s: could not reactivate: %s", feedUrl, err)
 	}
 
-	exists, _ := h.DB.Abonnements.ExistsByFeedUrl(chatId, feedUrl)
+	exists, err := h.DB.Abonnements.ExistsByFeedUrl(chatId, feedUrl)
+	if err != nil {
+		log.Println(err)
+		return c.Send("❌ Beim Abonnieren des Feeds ist ein Fehler aufgetreten.", defaultSendOptions)
+	}
 	if exists {
 		if reactivated {
 			return c.Send("✅ Der deaktivierte Feed wurde wieder aktiviert.", defaultSendOptions)

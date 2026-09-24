@@ -106,7 +106,9 @@ func (f *Fetcher) Fetch(ctx context.Context, feedURL, etag, lastModified string)
 
 		if isRedirect(resp.StatusCode) {
 			location := resp.Header.Get("Location")
-			resp.Body.Close()
+			// Drain a little so the connection can be reused for the next hop.
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+			_ = resp.Body.Close()
 			if location == "" {
 				return nil, fmt.Errorf("redirect status %d without Location header", resp.StatusCode)
 			}
@@ -143,7 +145,7 @@ func (f *Fetcher) Fetch(ctx context.Context, feedURL, etag, lastModified string)
 		}
 
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, err
 		}

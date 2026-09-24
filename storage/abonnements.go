@@ -110,7 +110,7 @@ func (db *Abonnements) Create(chatId int64, chatTitle string, feedUrl string, la
 		return err
 	}
 
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	const feedQuery = "SELECT id FROM feeds WHERE url = ?"
 	var feedId int64
@@ -156,7 +156,7 @@ func (db *Abonnements) Delete(chatId int64, feedId int64) error {
 		return err
 	}
 
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	const deleteAbonnementQuery = "DELETE FROM abonnements WHERE abonnements.chat_id = ? AND abonnements.feed_id = ?"
 	_, err = tx.Exec(deleteAbonnementQuery, chatId, feedId)
@@ -165,9 +165,11 @@ func (db *Abonnements) Delete(chatId int64, feedId int64) error {
 	}
 
 	// Check if user has other abonnements
-	const hasOtherAbonnementsQuery = "SELECT 1 FROM abonnements WHERE abonnements.chat_id = ?"
+	const hasOtherAbonnementsQuery = "SELECT EXISTS(SELECT 1 FROM abonnements WHERE abonnements.chat_id = ?)"
 	var hasOtherAbonnements bool
-	tx.Get(&hasOtherAbonnements, hasOtherAbonnementsQuery, chatId)
+	if err = tx.Get(&hasOtherAbonnements, hasOtherAbonnementsQuery, chatId); err != nil {
+		return err
+	}
 
 	if !hasOtherAbonnements {
 		const deleteChatQuery = "DELETE FROM chats WHERE chats.id = ?"
@@ -178,9 +180,11 @@ func (db *Abonnements) Delete(chatId int64, feedId int64) error {
 	}
 
 	// Check if feed has abonnement from other users
-	const hasOtherUsersQuery = "SELECT 1 FROM abonnements WHERE abonnements.feed_id = ?"
+	const hasOtherUsersQuery = "SELECT EXISTS(SELECT 1 FROM abonnements WHERE abonnements.feed_id = ?)"
 	var hasOtherUsers bool
-	tx.Get(&hasOtherUsers, hasOtherUsersQuery, feedId)
+	if err = tx.Get(&hasOtherUsers, hasOtherUsersQuery, feedId); err != nil {
+		return err
+	}
 
 	if !hasOtherUsers {
 		const deleteFeedQuery = "DELETE FROM feeds WHERE feeds.id = ?"
@@ -198,11 +202,10 @@ func (db *Abonnements) Delete(chatId int64, feedId int64) error {
 }
 
 func (db *Abonnements) ExistsByFeedUrl(chatId int64, feedUrl string) (bool, error) {
-	const query = `SELECT 1 FROM abonnements
-JOIN chats ON abonnements.chat_id = chats.id
+	const query = `SELECT EXISTS(SELECT 1 FROM abonnements
 JOIN feeds ON abonnements.feed_id = feeds.id
-WHERE chats.id = ?
-AND feeds.url = ?`
+WHERE abonnements.chat_id = ?
+AND feeds.url = ?)`
 
 	var exists bool
 	err := db.Get(&exists, query, chatId, feedUrl)
@@ -210,9 +213,9 @@ AND feeds.url = ?`
 }
 
 func (db *Abonnements) ExistsById(chatId int64, feedId int64) (bool, error) {
-	const query = `SELECT 1 FROM abonnements
+	const query = `SELECT EXISTS(SELECT 1 FROM abonnements
 WHERE abonnements.chat_id = ?
-AND abonnements.feed_id = ?`
+AND abonnements.feed_id = ?)`
 
 	var exists bool
 	err := db.Get(&exists, query, chatId, feedId)
@@ -264,7 +267,7 @@ func (db *Abonnements) GetDue() ([]Abonnement, error) {
 }
 
 func scanAbonnements(rows *sqlx.Rows) ([]Abonnement, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	feeds := make(map[int64]Feed)
 	feedChats := make(map[int64][]Chat)
@@ -337,7 +340,7 @@ func (db *Abonnements) MoveFeedURL(feedID int64, newURL string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var targetID int64
 	err = tx.Get(&targetID, "SELECT id FROM feeds WHERE url = ?", newURL)

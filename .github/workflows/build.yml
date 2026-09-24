@@ -13,6 +13,48 @@ env:
   NAME: rssbot
 
 jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+    services:
+      mariadb:
+        image: mariadb:12.3@sha256:805c8e104bd563d5bfa24fadd3f31cd419ea859cb5277f32b5dbf2db714f9ed1
+        env:
+          MARIADB_DATABASE: rssbot_test
+          MARIADB_USER: rssbot
+          MARIADB_PASSWORD: rssbot
+          MARIADB_RANDOM_ROOT_PASSWORD: '1'
+          # Differs from the runner's UTC to catch time zone bugs.
+          TZ: Asia/Tokyo
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        env:
+          RSSBOT_TEST_DSN: rssbot:rssbot@tcp(127.0.0.1:3306)/rssbot_test?charset=utf8mb4&parseTime=True&loc=Local
+        run: go test -race ./...
+
   build:
     name: build
     runs-on: ubuntu-latest
@@ -60,6 +102,7 @@ jobs:
 
   docker:
     name: docker
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read # checkout

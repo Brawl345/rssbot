@@ -268,10 +268,8 @@ func (h *Handler) handleRateLimit(abonnement storage.Abonnement, feed storage.Fe
 	if delay <= 0 {
 		// FRB021: a 429/503 without a hint is still "slow down".
 		delay = h.Config.Poll.Interval * 4
-		if delay > h.Config.Poll.IntervalMax {
-			delay = h.Config.Poll.IntervalMax
-		}
 	}
+	delay = min(delay, h.Config.Poll.IntervalMax)
 
 	// Keep the cached validators (FRB016) and do not count this toward retirement.
 	if err := h.DB.Abonnements.Reschedule(feed.ID, time.Now().Add(delay), feed.ErrorCount, feed.UnchangedCount); err != nil {
@@ -318,7 +316,8 @@ func (h *Handler) disable(abonnement storage.Abonnement, feed storage.Feed, reas
 
 // nextPoll computes the next poll time: base interval, optionally stretched for
 // feeds that rarely change (FRB023), never faster than server hints
-// (max-age/ttl, FRB022/024), shifted out of skipHours/skipDays (FRB024).
+// (max-age/ttl, FRB022/024, capped at POLL_INTERVAL_MAX), shifted out of
+// skipHours/skipDays (FRB024).
 func (h *Handler) nextPoll(unchangedCount int, result *fetcher.Result) time.Time {
 	interval := h.Config.Poll.Interval
 
@@ -332,12 +331,8 @@ func (h *Handler) nextPoll(unchangedCount int, result *fetcher.Result) time.Time
 	}
 
 	if result != nil {
-		if result.MaxAge > interval {
-			interval = result.MaxAge
-		}
-		if result.FeedInterval > interval {
-			interval = result.FeedInterval
-		}
+		hint := min(max(result.MaxAge, result.FeedInterval), h.Config.Poll.IntervalMax)
+		interval = max(interval, hint)
 	}
 
 	next := time.Now().Add(interval)

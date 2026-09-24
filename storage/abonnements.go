@@ -59,6 +59,7 @@ type (
 		FeedInterval   int            `db:"feed_interval"`
 		SkipHours      sql.NullString `db:"skip_hours"`
 		SkipDays       sql.NullString `db:"skip_days"`
+		FailingSince   sql.NullTime   `db:"failing_since"`
 	}
 
 	// PollHints are the polling hints a feed declares in its body (ttl,
@@ -235,7 +236,7 @@ const abonnementSelect = `SELECT chats.id, chats.created_at, chats.title,
 feeds.id, feeds.url, feeds.last_entry, feeds.created_at, feeds.updated_at,
 feeds.etag, feeds.last_modified, feeds.next_poll_at, feeds.last_poll_at,
 feeds.error_count, feeds.unchanged_count, feeds.disabled, feeds.disabled_reason,
-feeds.feed_interval, feeds.skip_hours, feeds.skip_days
+feeds.feed_interval, feeds.skip_hours, feeds.skip_days, feeds.failing_since
 FROM abonnements
 JOIN chats ON abonnements.chat_id = chats.id
 JOIN feeds ON abonnements.feed_id = feeds.id`
@@ -276,7 +277,7 @@ func scanAbonnements(rows *sqlx.Rows) ([]Abonnement, error) {
 			&feed.ID, &feed.Url, &feed.LastEntry, &feed.CreatedAt, &feed.UpdatedAt,
 			&feed.ETag, &feed.LastModified, &feed.NextPollAt, &feed.LastPollAt,
 			&feed.ErrorCount, &feed.UnchangedCount, &feed.Disabled, &feed.DisabledReason,
-			&feed.FeedInterval, &feed.SkipHours, &feed.SkipDays)
+			&feed.FeedInterval, &feed.SkipHours, &feed.SkipDays, &feed.FailingSince)
 		if err != nil {
 			return nil, err
 		}
@@ -305,7 +306,7 @@ func scanAbonnements(rows *sqlx.Rows) ([]Abonnement, error) {
 func (db *Abonnements) SetFeedState(feedID int64, lastEntry, etag, lastModified *string, hints PollHints, nextPollAt time.Time, errorCount, unchangedCount int) error {
 	const query = `UPDATE feeds
 SET last_entry = ?, etag = ?, last_modified = ?, feed_interval = ?, skip_hours = ?, skip_days = ?,
-    next_poll_at = ?, last_poll_at = ?, error_count = ?, unchanged_count = ?
+    next_poll_at = ?, last_poll_at = ?, error_count = ?, unchanged_count = ?, failing_since = NULL
 WHERE id = ?`
 	interval, skipHours, skipDays := hints.encode()
 	_, err := db.Exec(query, lastEntry, etag, lastModified, interval, skipHours, skipDays,
@@ -315,12 +316,15 @@ WHERE id = ?`
 
 // Reschedule updates only the poll schedule and counters, preserving the cached
 // etag/last_modified (FRB010-016) — used for 304, rate-limiting and transient
-// errors.
+// errors. failing_since marks the start of an error streak and is cleared once
+// errorCount drops back to 0.
 func (db *Abonnements) Reschedule(feedID int64, nextPollAt time.Time, errorCount, unchangedCount int) error {
 	const query = `UPDATE feeds
-SET next_poll_at = ?, last_poll_at = ?, error_count = ?, unchanged_count = ?
+SET next_poll_at = ?, last_poll_at = ?, error_count = ?, unchanged_count = ?,
+    failing_since = CASE WHEN ? > 0 THEN COALESCE(failing_since, ?) ELSE NULL END
 WHERE id = ?`
-	_, err := db.Exec(query, nextPollAt, time.Now(), errorCount, unchangedCount, feedID)
+	now := time.Now()
+	_, err := db.Exec(query, nextPollAt, now, errorCount, unchangedCount, errorCount, now, feedID)
 	return err
 }
 
@@ -377,7 +381,7 @@ func (db *Abonnements) DisableFeed(feedID int64, reason string) error {
 // ReactivateFeed re-enables a retired feed, e.g. after it was successfully
 // fetched again on subscribe. It reports whether the feed was disabled.
 func (db *Abonnements) ReactivateFeed(feedUrl string, nextPollAt time.Time) (bool, error) {
-	const query = `UPDATE feeds SET disabled = 0, disabled_reason = NULL, error_count = 0, next_poll_at = ?
+	const query = `UPDATE feeds SET disabled = 0, disabled_reason = NULL, error_count = 0, failing_since = NULL, next_poll_at = ?
 WHERE url = ? AND disabled = 1`
 	result, err := db.Exec(query, nextPollAt, feedUrl)
 	if err != nil {

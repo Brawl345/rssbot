@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	// maxFeedErrors is how many consecutive failures a feed tolerates before it
-	// is retired (FRB110-119).
+	// A feed is retired once it failed at least maxFeedErrors times in a row
+	// and has been failing for retireAfter (FRB110-119).
 	maxFeedErrors = 12
+	retireAfter   = 7 * 24 * time.Hour
 	// fetchTimeout bounds a single feed fetch.
 	fetchTimeout = 35 * time.Second
 )
@@ -288,10 +289,14 @@ func (h *Handler) handleRateLimit(abonnement storage.Abonnement, feed storage.Fe
 }
 
 // handleSoftError applies exponential backoff and retires the feed once it has
-// failed too many times in a row (FRB110-119).
+// been failing for too long (FRB110-119).
 func (h *Handler) handleSoftError(abonnement storage.Abonnement, feed storage.Feed, reason, body string) {
 	errorCount := feed.ErrorCount + 1
-	if errorCount >= maxFeedErrors {
+	failingSince := time.Now()
+	if feed.FailingSince.Valid {
+		failingSince = feed.FailingSince.Time
+	}
+	if errorCount >= maxFeedErrors && time.Since(failingSince) >= retireAfter {
 		h.disable(abonnement, feed, reason, body)
 		return
 	}
@@ -300,7 +305,8 @@ func (h *Handler) handleSoftError(abonnement storage.Abonnement, feed storage.Fe
 	if err := h.DB.Abonnements.Reschedule(feed.ID, time.Now().Add(delay), errorCount, feed.UnchangedCount); err != nil {
 		log.Printf("%s: reschedule failed: %s", feed.Url, err)
 	}
-	log.Printf("%s: %s (error %d/%d), retrying in %s", feed.Url, reason, errorCount, maxFeedErrors, delay.Round(time.Second))
+	log.Printf("%s: %s (error %d, failing since %s), retrying in %s",
+		feed.Url, reason, errorCount, failingSince.Format(time.DateTime), delay.Round(time.Second))
 }
 
 func (h *Handler) disable(abonnement storage.Abonnement, feed storage.Feed, reason, body string) {

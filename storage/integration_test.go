@@ -382,3 +382,17 @@ func TestReplacements(t *testing.T) {
 		t.Error("deleting a missing replacement should fail")
 	}
 }
+
+func TestFeedURLsAreCaseSensitive(t *testing.T) {
+	db := newTestDB(t)
+	mustCreate(t, db, 1, "https://example.org/Feed", time.Now())
+	mustCreate(t, db, 1, "https://example.org/feed", time.Now())
+
+	all, err := db.Abonnements.GetAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Errorf("got %d feeds, want 2 distinct URLs", len(all))
+	}
+}

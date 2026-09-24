@@ -31,6 +31,12 @@ in
       description = "User under which RSS Bot runs.";
     };
 
+    group = mkOption {
+      type = types.str;
+      default = defaultUser;
+      description = "Group under which RSS Bot runs.";
+    };
+
     adminId = mkOption {
       type = types.int;
       description = "Admin ID";
@@ -125,8 +131,9 @@ in
 
     systemd.services.rssbot = {
       description = "RSS Bot for Telegram";
-      after = [ "network-online.target" "mysql.service" ];
-      requires = [ "network-online.target" "mysql.service" ];
+      wants = [ "network-online.target" ];
+      after = [ "network-online.target" ] ++ optional cfg.database.createLocally "mysql.service";
+      requires = optional cfg.database.createLocally "mysql.service";
       wantedBy = [ "multi-user.target" ];
 
       script = ''
@@ -145,7 +152,7 @@ in
 
         Restart = "always";
         User = cfg.user;
-        Group = defaultUser;
+        Group = cfg.group;
       };
 
       environment = {
@@ -158,14 +165,16 @@ in
       };
     };
 
-    users = optionalAttrs (cfg.user == defaultUser) {
-      users.${defaultUser} = {
+    users.users = optionalAttrs (cfg.user == defaultUser) {
+      ${defaultUser} = {
         isSystemUser = true;
-        group = defaultUser;
+        inherit (cfg) group;
         description = "RSS Bot user";
       };
+    };
 
-      groups.${defaultUser} = { };
+    users.groups = optionalAttrs (cfg.group == defaultUser) {
+      ${defaultUser} = { };
     };
 
   };

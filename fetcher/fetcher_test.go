@@ -222,6 +222,33 @@ func TestTemporaryRedirectNotPersisted(t *testing.T) {
 	}
 }
 
+func TestRedirectFromPublicToPrivateRefused(t *testing.T) {
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://internal.test/feed", http.StatusFound)
+	}))
+	defer src.Close()
+
+	f := New()
+	f.privateHost = func(_ context.Context, host string) bool { return host == "internal.test" }
+
+	_, err := f.Fetch(context.Background(), src.URL, "", "")
+	if err == nil || !strings.Contains(err.Error(), "private") {
+		t.Fatalf("err = %v, want refused private redirect", err)
+	}
+}
+
+func TestRedirectToUnsupportedSchemeRefused(t *testing.T) {
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "file:///etc/passwd", http.StatusFound)
+	}))
+	defer src.Close()
+
+	_, err := New().Fetch(context.Background(), src.URL, "", "")
+	if err == nil || !strings.Contains(err.Error(), "scheme") {
+		t.Fatalf("err = %v, want refused scheme", err)
+	}
+}
+
 func TestNonFeedRejected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("<html><body>not a feed</body></html>"))

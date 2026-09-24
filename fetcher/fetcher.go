@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"runtime/debug"
@@ -30,8 +31,9 @@ const (
 )
 
 type Fetcher struct {
-	client    *http.Client
-	userAgent string
+	client      *http.Client
+	userAgent   string
+	privateHost func(ctx context.Context, host string) bool
 }
 
 // Result is the interpreted outcome of a single feed fetch. ETag and
@@ -62,7 +64,8 @@ func New() *Fetcher {
 				return http.ErrUseLastResponse
 			},
 		},
-		userAgent: buildUserAgent(),
+		userAgent:   buildUserAgent(),
+		privateHost: isPrivateHost,
 	}
 }
 
@@ -75,6 +78,10 @@ func (f *Fetcher) Fetch(ctx context.Context, feedURL, etag, lastModified string)
 	currentURL := feedURL
 	permanentPrefix := true
 	var permanentURL string
+	// A feed the admin subscribed to on an internal address may redirect
+	// internally, but a public feed must not bounce the bot into the local
+	// network (SSRF). Only resolved once a redirect is actually followed.
+	var originPrivate *bool
 
 	for hop := 0; ; hop++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, currentURL, nil)
@@ -110,6 +117,13 @@ func (f *Fetcher) Fetch(ctx context.Context, feedURL, etag, lastModified string)
 			next, err := resolveLocation(currentURL, location)
 			if err != nil {
 				return nil, err
+			}
+			if originPrivate == nil {
+				private := f.privateHost(ctx, hostOf(feedURL))
+				originPrivate = &private
+			}
+			if !*originPrivate && f.privateHost(ctx, hostOf(next)) {
+				return nil, fmt.Errorf("redirect to private address %s refused", next)
 			}
 			if (resp.StatusCode == http.StatusMovedPermanently ||
 				resp.StatusCode == http.StatusPermanentRedirect) && permanentPrefix {
@@ -178,7 +192,44 @@ func resolveLocation(base, location string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return b.ResolveReference(l).String(), nil
+	next := b.ResolveReference(l)
+	if next.Scheme != "http" && next.Scheme != "https" {
+		return "", fmt.Errorf("redirect to unsupported scheme %q", next.Scheme)
+	}
+	return next.String(), nil
+}
+
+func hostOf(rawURL string) string {
+	if u, err := url.Parse(rawURL); err == nil {
+		return u.Hostname()
+	}
+	return ""
+}
+
+// isPrivateHost reports whether host is or resolves to a loopback, private,
+// link-local or unspecified address.
+func isPrivateHost(ctx context.Context, host string) bool {
+	if host == "" {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return isPrivateIP(ip)
+	}
+	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return false
+	}
+	for _, addr := range addrs {
+		if isPrivateIP(addr.IP) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPrivateIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }
 
 func parseMaxAge(cacheControl string) time.Duration {

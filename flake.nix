@@ -44,6 +44,16 @@
         };
       });
 
+      checks =
+        nixpkgs.lib.genAttrs
+          [
+            "x86_64-linux"
+            "aarch64-linux"
+          ]
+          (system: {
+            nixos-module = nixpkgs.legacyPackages.${system}.testers.runNixOSTest (import ./nixos-test.nix self);
+          });
+
       packages = forAllSystems (pkgs: {
         rssbot = pkgs.buildGoModule {
           pname = "rssbot";

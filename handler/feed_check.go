@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Brawl345/rssbot/fetcher"
 	"github.com/Brawl345/rssbot/storage"
@@ -438,7 +439,7 @@ func containsDay(days []string, day string) bool {
 }
 
 func processContent(content string, replacements []compiledReplacement) string {
-	processed := html.UnescapeString(content)
+	processed := strings.ToValidUTF8(html.UnescapeString(content), "")
 
 	for _, replacement := range replacements {
 		if replacement.re != nil {
@@ -451,8 +452,8 @@ func processContent(content string, replacements []compiledReplacement) string {
 	processed = blankLineRe.ReplaceAllString(processed, "")
 	processed = strings.TrimSpace(processed)
 
-	if len(processed) > 270 {
-		return processed[:270] + "..."
+	if utf8.RuneCountInString(processed) > 270 {
+		return string([]rune(processed)[:270]) + "..."
 	}
 
 	return processed

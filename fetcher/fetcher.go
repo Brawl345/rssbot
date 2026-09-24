@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mmcdole/gofeed"
 	"github.com/mmcdole/gofeed/rss"
@@ -241,9 +242,9 @@ func applyFeedHints(result *Result, body []byte) {
 }
 
 func snippet(body []byte) string {
-	s := strings.TrimSpace(string(body))
-	if len(s) > bodySnippetLen {
-		return s[:bodySnippetLen] + "…"
+	s := strings.TrimSpace(strings.ToValidUTF8(string(body), ""))
+	if utf8.RuneCountInString(s) > bodySnippetLen {
+		return string([]rune(s)[:bodySnippetLen]) + "…"
 	}
 	return s
 }

@@ -3,6 +3,12 @@ on:
   - push
   - pull_request
 
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 env:
   NAME: rssbot
 
@@ -10,6 +16,8 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
     strategy:
       matrix:
         GOOS: [windows, linux, darwin]
@@ -25,6 +33,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -35,16 +45,16 @@ jobs:
         env:
           GOOS: ${{ matrix.GOOS }}
           GOARCH: ${{ matrix.GOARCH }}
-        run: go build -ldflags="-s -w" -o dist/$NAME-$GOOS-$GOARCH
+        run: go build -ldflags="-s -w" -o "dist/${NAME}-${GOOS}-${GOARCH}"
 
       - name: Rename binaries (Windows)
         if: matrix.GOOS == 'windows'
-        run: for x in dist/$NAME-windows-*; do mv $x $x.exe; done
+        run: for x in dist/"${NAME}"-windows-*; do mv "$x" "$x.exe"; done
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: ${{env.NAME}}-${{ matrix.GOOS }}-${{ matrix.GOARCH }}-${{github.sha}}
+          name: ${{ env.NAME }}-${{ matrix.GOOS }}-${{ matrix.GOARCH }}-${{ github.sha }}
           path: dist/*
           retention-days: 90
 
@@ -52,31 +62,31 @@ jobs:
     name: docker
     runs-on: ubuntu-latest
     permissions:
-      packages: write
-      contents: read
+      contents: read # checkout
+      packages: write # push image to ghcr.io
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Build image
-        run: docker build . --file Dockerfile --tag $NAME --build-arg VERSION="${GITHUB_SHA::7}" --label "runnumber=${GITHUB_RUN_ID}"
+        run: docker build . --file Dockerfile --tag "$NAME" --build-arg VERSION="${GITHUB_SHA::7}" --label "runnumber=${GITHUB_RUN_ID}"
 
       - name: Log in to registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       - name: Push image
         run: |
-          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$NAME
-
-          # This changes all uppercase characters to lowercase.
-          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
-          # This strips the git ref prefix from the version.
-          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-          # This strips the "v" prefix from the tag name.
-          [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
-          # This uses the Docker `latest` tag convention.
-          [ "$VERSION" == "master" ] && VERSION=latest
-          echo IMAGE_ID=$IMAGE_ID
-          echo VERSION=$VERSION
-          docker tag $NAME $IMAGE_ID:$VERSION
-          docker push $IMAGE_ID:$VERSION
+          image_id="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${NAME}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version=latest
+          fi
+          echo "Pushing ${image_id}:${version}"
+          docker tag "$NAME" "${image_id}:${version}"
+          docker push "${image_id}:${version}"

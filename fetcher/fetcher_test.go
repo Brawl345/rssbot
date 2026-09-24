@@ -111,6 +111,28 @@ func TestConditionalRequestEchoed(t *testing.T) {
 	}
 }
 
+func TestConditionalRequestThroughTemporaryRedirect(t *testing.T) {
+	var gotINM string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotINM = r.Header.Get("If-None-Match")
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer target.Close()
+
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer src.Close()
+
+	res := fetch(t, New(), src.URL, `"abc"`, "")
+	if gotINM != `"abc"` {
+		t.Errorf("If-None-Match after 302 = %q, want %q", gotINM, `"abc"`)
+	}
+	if !res.NotModified {
+		t.Errorf("expected 304 through temporary redirect, got status=%d", res.Status)
+	}
+}
+
 func TestRetryAfterParsed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "120")

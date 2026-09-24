@@ -82,15 +82,14 @@ func (f *Fetcher) Fetch(ctx context.Context, feedURL, etag, lastModified string)
 			return nil, err
 		}
 		req.Header.Set("User-Agent", f.userAgent)
-		// Conditional headers only apply to the originally requested resource;
-		// once we follow a redirect we no longer have cache values for it.
-		if hop == 0 {
-			if etag != "" {
-				req.Header.Set("If-None-Match", etag)
-			}
-			if lastModified != "" {
-				req.Header.Set("If-Modified-Since", lastModified)
-			}
+		// The stored validators belong to the final resource of the chain, so
+		// they are sent on every hop; otherwise feeds behind a temporary
+		// redirect could never be answered with 304.
+		if etag != "" {
+			req.Header.Set("If-None-Match", etag)
+		}
+		if lastModified != "" {
+			req.Header.Set("If-Modified-Since", lastModified)
 		}
 
 		resp, err := f.client.Do(req)

@@ -161,7 +161,7 @@ func (h *Handler) pollFeed(abonnement storage.Abonnement, replacements []compile
 			log.Printf("%s: could not update url to %s: %s", feed.Url, result.PermanentURL, err)
 		} else {
 			h.notify(abonnement, fmt.Sprintf("ℹ️ Feed wurde dauerhaft umgezogen:\n%s\n→ %s",
-				feed.Url, result.PermanentURL))
+				html.EscapeString(feed.Url), html.EscapeString(result.PermanentURL)))
 			if merged {
 				// This feed row is gone; the existing feed at the target URL
 				// now owns these subscriptions and will deliver the content.
@@ -285,7 +285,7 @@ func (h *Handler) handleRateLimit(abonnement storage.Abonnement, feed storage.Fe
 	if result.Status == 429 {
 		h.notify(abonnement, fmt.Sprintf(
 			"⚠️ Feed sendet \"429 Too Many Requests\":\n%s\nBackoff: %s. Eventuell ist das Poll-Intervall zu kurz.",
-			feed.Url, delay.Round(time.Second)))
+			html.EscapeString(feed.Url), delay.Round(time.Second)))
 	}
 }
 
@@ -317,7 +317,7 @@ func (h *Handler) disable(abonnement storage.Abonnement, feed storage.Feed, reas
 	}
 	log.Printf("%s: disabled (%s)", feed.Url, reason)
 
-	msg := fmt.Sprintf("🚫 Feed wurde deaktiviert:\n%s\nGrund: %s", feed.Url, reason)
+	msg := fmt.Sprintf("🚫 Feed wurde deaktiviert:\n%s\nGrund: %s", html.EscapeString(feed.Url), html.EscapeString(reason))
 	if body != "" {
 		msg += fmt.Sprintf("\n<pre>%s</pre>", html.EscapeString(body))
 	}

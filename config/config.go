@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"text/template"
@@ -24,39 +25,53 @@ type PollConfig struct {
 }
 
 func GetPollConfig() PollConfig {
-	return PollConfig{
+	cfg := PollConfig{
 		Interval:    durationEnv("POLL_INTERVAL", 10*time.Minute),
 		IntervalMax: durationEnv("POLL_INTERVAL_MAX", 6*time.Hour),
 		Adaptive:    boolEnv("POLL_ADAPTIVE", true),
 		Concurrency: intEnv("POLL_CONCURRENCY", 8),
 		Tick:        durationEnv("POLL_TICK", 30*time.Second),
 	}
+	if cfg.IntervalMax < cfg.Interval {
+		log.Printf("POLL_INTERVAL_MAX (%s) is below POLL_INTERVAL (%s), using %s", cfg.IntervalMax, cfg.Interval, cfg.Interval)
+		cfg.IntervalMax = cfg.Interval
+	}
+	return cfg
 }
 
 func durationEnv(key string, fallback time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return d
-		}
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
 	}
+	if d, err := time.ParseDuration(v); err == nil && d > 0 {
+		return d
+	}
+	log.Printf("Invalid %s=%q, using default %s", key, v, fallback)
 	return fallback
 }
 
 func intEnv(key string, fallback int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
 	}
+	if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		return n
+	}
+	log.Printf("Invalid %s=%q, using default %d", key, v, fallback)
 	return fallback
 }
 
 func boolEnv(key string, fallback bool) bool {
-	if v := os.Getenv(key); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
 	}
+	if b, err := strconv.ParseBool(v); err == nil {
+		return b
+	}
+	log.Printf("Invalid %s=%q, using default %t", key, v, fallback)
 	return fallback
 }
 

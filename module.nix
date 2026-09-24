@@ -17,6 +17,8 @@ let
     optional
     optionalAttrs
     optionalString
+    mapNullable
+    boolToString
     ;
 in
 {
@@ -47,12 +49,70 @@ in
       description = "File containing Telegram Bot Token";
     };
 
-    # TODO: Find a way to load a custom post.gohtml
-    # template = mkOption {
-    #   type = types.nullOr types.lines;
-    #   default = null;
-    #   description = "Custom post.gohtml template content";
-    # };
+    template = mkOption {
+      type = types.nullOr types.lines;
+      default = null;
+      example = ''
+        <b>[#RSS] {{.Title}}</b>
+        <i>{{.FeedTitle}}</i>
+        {{- if ne .Content "" }}
+        {{.Content}}
+        {{- end }}
+        <a href="{{.PostLink}}">{{.PostDomain}}</a>
+      '';
+      description = "Custom post template (Go template). Uses the built-in template if null.";
+    };
+
+    templateFile = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      example = "./post.gohtml";
+      description = "Path to a custom post template file. Alternative to `template`.";
+    };
+
+    poll = {
+      interval = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "5m";
+        description = "How often each feed is checked. Uses the bot's default (10m) if null.";
+      };
+
+      intervalMax = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "2h";
+        description = ''
+          The longest a feed ever waits between two checks. Limits the adaptive slow-down,
+          the waiting time after errors and intervals requested by servers.
+          Uses the bot's default (6h) if null.
+        '';
+      };
+
+      adaptive = mkOption {
+        type = types.nullOr types.bool;
+        default = null;
+        example = false;
+        description = ''
+          Check feeds that rarely get new entries less often (up to `intervalMax`).
+          If false, every feed is checked every `interval`. Uses the bot's default (true) if null.
+        '';
+      };
+
+      concurrency = mkOption {
+        type = types.nullOr types.ints.positive;
+        default = null;
+        example = 4;
+        description = "How many feeds are downloaded at the same time. Uses the bot's default (8) if null.";
+      };
+
+      tick = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "1m";
+        description = "How often the bot looks for feeds that are due. Uses the bot's default (30s) if null.";
+      };
+    };
 
     database = {
       host = lib.mkOption {
@@ -113,6 +173,10 @@ in
         assertion = cfg.database.socket != null || cfg.database.passwordFile != null;
         message = "Either services.rssbot.database.socket or services.rssbot.database.passwordFile must be set.";
       }
+      {
+        assertion = !(cfg.template != null && cfg.templateFile != null);
+        message = "Only one of services.rssbot.template or services.rssbot.templateFile can be set.";
+      }
     ];
 
     services.mysql = lib.mkIf cfg.database.createLocally {
@@ -162,6 +226,18 @@ in
         MYSQL_USER = cfg.database.user;
         MYSQL_DB = cfg.database.name;
         MYSQL_SOCKET = cfg.database.socket;
+
+        POST_TEMPLATE =
+          if cfg.template != null then
+            pkgs.writeText "post.gohtml" cfg.template
+          else
+            mapNullable (file: "${file}") cfg.templateFile;
+
+        POLL_INTERVAL = cfg.poll.interval;
+        POLL_INTERVAL_MAX = cfg.poll.intervalMax;
+        POLL_ADAPTIVE = mapNullable boolToString cfg.poll.adaptive;
+        POLL_CONCURRENCY = mapNullable toString cfg.poll.concurrency;
+        POLL_TICK = cfg.poll.tick;
       };
     };
 

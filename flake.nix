@@ -52,6 +52,7 @@
           ldflags = [
             "-s"
             "-w"
+            "-X github.com/Brawl345/rssbot/fetcher.Version=${version}"
           ];
 
           meta = {

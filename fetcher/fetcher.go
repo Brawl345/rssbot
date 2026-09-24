@@ -300,7 +300,15 @@ func snippet(body []byte) string {
 	return s
 }
 
+// Version can be set at build time via
+// -ldflags "-X github.com/Brawl345/rssbot/fetcher.Version=...". Otherwise the
+// VCS revision embedded by the Go toolchain is used.
+var Version string
+
 func buildUserAgent() string {
+	if Version != "" {
+		return fmt.Sprintf("rssbot/%s (+%s)", Version, repoURL)
+	}
 	version := "dev"
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {

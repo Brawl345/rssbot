@@ -27,7 +27,7 @@ func (h *Handler) OnListAll(c telebot.Context) error {
 	sb := strings.Builder{}
 
 	for _, abonnement := range abonnements {
-		sb.WriteString(fmt.Sprintf("<b>%d)</b> %s\n", abonnement.Feed.ID, abonnement.Feed.Url))
+		sb.WriteString(fmt.Sprintf("<b>%d)</b> %s%s\n", abonnement.Feed.ID, abonnement.Feed.Url, feedStatus(abonnement.Feed)))
 
 		for _, chat := range abonnement.Chats {
 			sb.WriteString(fmt.Sprintf("    <code>%d</code> (%s)\n", chat.ID,

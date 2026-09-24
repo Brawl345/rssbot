@@ -93,10 +93,20 @@ type fakeStore struct {
 	disabled    map[int64]string
 	moved       map[int64]string
 	mergeOnMove bool
+
+	created       []createCall
+	deleted       [][2]int64
+	subscriptions map[int64][]storage.Feed
+	disabledURLs  map[string]bool
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{disabled: map[int64]string{}, moved: map[int64]string{}}
+	return &fakeStore{
+		disabled:      map[int64]string{},
+		moved:         map[int64]string{},
+		subscriptions: map[int64][]storage.Feed{},
+		disabledURLs:  map[string]bool{},
+	}
 }
 
 func (s *fakeStore) SetFeedState(feedID int64, lastEntry, etag, lastModified *string, hints storage.PollHints, nextPollAt time.Time, errorCount, unchangedCount int) error {

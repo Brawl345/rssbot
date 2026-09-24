@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/mmcdole/gofeed"
-	ext "github.com/mmcdole/gofeed/extensions"
 	"github.com/mmcdole/gofeed/rss"
 )
 
@@ -45,7 +44,7 @@ type Result struct {
 	LastModified string        // exactly as received (FRB001)
 	MaxAge       time.Duration // Cache-Control: max-age (FRB022), 0 if absent
 	RetryAfter   time.Duration // Retry-After on 429/503 (FRB020/021), 0 if absent
-	FeedInterval time.Duration // ttl / sy:updatePeriod hint (FRB023/024), 0 if absent
+	FeedInterval time.Duration // ttl hint (FRB023/024), 0 if absent
 	SkipHours    []int         // RSS skipHours (FRB024)
 	SkipDays     []string      // RSS skipDays (FRB024)
 	PermanentURL string        // set on a 301/308 chain (FRB130/131)
@@ -211,8 +210,10 @@ func parseRetryAfter(value string) time.Duration {
 	return 0
 }
 
-// applyFeedHints extracts RSS polling hints (ttl, skipHours, skipDays,
-// sy:updatePeriod/updateFrequency) from the raw body when it is an RSS feed.
+// applyFeedHints extracts RSS polling hints (ttl, skipHours, skipDays) from the
+// raw body when it is an RSS feed. sy:updatePeriod is deliberately ignored:
+// WordPress emits "hourly" by default for every feed, regardless of how often it
+// actually changes.
 func applyFeedHints(result *Result, body []byte) {
 	feedType := gofeed.DetectFeedType(bytes.NewReader(body))
 	if feedType != gofeed.FeedTypeRSS {
@@ -235,47 +236,6 @@ func applyFeedHints(result *Result, body []byte) {
 			result.FeedInterval = time.Duration(mins) * time.Minute
 		}
 	}
-
-	if sy := syInterval(rssFeed.Extensions); sy > result.FeedInterval {
-		result.FeedInterval = sy
-	}
-}
-
-// syInterval derives a polling interval from the syndication module
-// (sy:updatePeriod / sy:updateFrequency). Defaults follow the RSS 1.0
-// syndication spec: daily period, frequency of 1.
-func syInterval(extensions ext.Extensions) time.Duration {
-	sy, ok := extensions["sy"]
-	if !ok {
-		return 0
-	}
-
-	period := 24 * time.Hour // "daily" default
-	if vals := sy["updatePeriod"]; len(vals) > 0 {
-		switch strings.ToLower(strings.TrimSpace(vals[0].Value)) {
-		case "hourly":
-			period = time.Hour
-		case "daily":
-			period = 24 * time.Hour
-		case "weekly":
-			period = 7 * 24 * time.Hour
-		case "monthly":
-			period = 30 * 24 * time.Hour
-		case "yearly":
-			period = 365 * 24 * time.Hour
-		}
-	} else {
-		return 0 // no syndication info present
-	}
-
-	frequency := 1
-	if vals := sy["updateFrequency"]; len(vals) > 0 {
-		if n, err := strconv.Atoi(strings.TrimSpace(vals[0].Value)); err == nil && n > 0 {
-			frequency = n
-		}
-	}
-
-	return period / time.Duration(frequency)
 }
 
 func snippet(body []byte) string {

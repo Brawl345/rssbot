@@ -76,7 +76,6 @@ func TestFetchSetsHeadersAndParses(t *testing.T) {
 	if res.MaxAge != 30*time.Minute {
 		t.Errorf("MaxAge = %s, want 30m (FRB022)", res.MaxAge)
 	}
-	// ttl=90m beats sy hourly/2 (=30m); both beat nothing.
 	if res.FeedInterval != 90*time.Minute {
 		t.Errorf("FeedInterval = %s, want 90m from ttl (FRB024)", res.FeedInterval)
 	}
@@ -85,6 +84,17 @@ func TestFetchSetsHeadersAndParses(t *testing.T) {
 	}
 	if len(res.SkipDays) != 1 || res.SkipDays[0] != "Sunday" {
 		t.Errorf("SkipDays = %v, want [Sunday] (FRB024)", res.SkipDays)
+	}
+}
+
+func TestSyndicationHintIgnored(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(strings.Replace(sampleRSS, "<ttl>90</ttl>", "", 1)))
+	}))
+	defer srv.Close()
+
+	if res := fetch(t, New(), srv.URL, "", ""); res.FeedInterval != 0 {
+		t.Errorf("FeedInterval = %s, want 0 without ttl", res.FeedInterval)
 	}
 }
 

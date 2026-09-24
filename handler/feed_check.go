@@ -324,12 +324,13 @@ func (h *Handler) disable(abonnement storage.Abonnement, feed storage.Feed, reas
 func (h *Handler) nextPoll(unchangedCount int, result *fetcher.Result) time.Time {
 	interval := h.Config.Poll.Interval
 
+	// Grow linearly so a feed that was quiet overnight is not delayed for hours
+	// once it becomes active again.
 	if h.Config.Poll.Adaptive && unchangedCount > 0 {
-		for i := 0; i < unchangedCount && interval < h.Config.Poll.IntervalMax; i++ {
-			interval *= 2
-		}
-		if interval > h.Config.Poll.IntervalMax {
+		if steps := time.Duration(unchangedCount); steps >= h.Config.Poll.IntervalMax/interval {
 			interval = h.Config.Poll.IntervalMax
+		} else {
+			interval = min(interval*(1+steps), h.Config.Poll.IntervalMax)
 		}
 	}
 

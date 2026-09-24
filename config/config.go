@@ -26,7 +26,7 @@ type PollConfig struct {
 func GetPollConfig() PollConfig {
 	return PollConfig{
 		Interval:    durationEnv("POLL_INTERVAL", 10*time.Minute),
-		IntervalMax: durationEnv("POLL_INTERVAL_MAX", 24*time.Hour),
+		IntervalMax: durationEnv("POLL_INTERVAL_MAX", 6*time.Hour),
 		Adaptive:    boolEnv("POLL_ADAPTIVE", true),
 		Concurrency: intEnv("POLL_CONCURRENCY", 8),
 		Tick:        durationEnv("POLL_TICK", 30*time.Second),

@@ -23,11 +23,16 @@
     {
 
       nixosModules = {
-        default = ./module.nix;
+        default =
+          { lib, pkgs, ... }:
+          {
+            imports = [ ./module.nix ];
+            services.rssbot.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          };
       };
 
       overlays.default = final: prev: {
-        rssbot = self.packages.${prev.system}.default;
+        rssbot = self.packages.${final.stdenv.hostPlatform.system}.default;
       };
 
       devShells = forAllSystems (pkgs: {
@@ -63,7 +68,7 @@
           };
         };
 
-        default = self.packages.${pkgs.system}.rssbot;
+        default = self.packages.${pkgs.stdenv.hostPlatform.system}.rssbot;
       });
     };
 }

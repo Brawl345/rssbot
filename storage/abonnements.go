@@ -201,9 +201,11 @@ func (db *Abonnements) GetAll() ([]Abonnement, error) {
 // GetDue returns only feeds that are enabled and whose scheduled poll time has
 // passed (or was never set). This is what keeps polling on a per-feed schedule
 // and prevents a process restart from re-downloading everything (FRB037).
+// Timestamps are always passed from Go instead of using NOW(), so they are
+// written and compared in the driver's loc regardless of the MySQL time zone.
 func (db *Abonnements) GetDue() ([]Abonnement, error) {
-	const where = ` WHERE feeds.disabled = 0 AND (feeds.next_poll_at IS NULL OR feeds.next_poll_at <= NOW())`
-	rows, err := db.Queryx(abonnementSelect + where)
+	const where = ` WHERE feeds.disabled = 0 AND (feeds.next_poll_at IS NULL OR feeds.next_poll_at <= ?)`
+	rows, err := db.Queryx(abonnementSelect+where, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -250,10 +252,10 @@ func scanAbonnements(rows *sqlx.Rows) ([]Abonnement, error) {
 // entry and the next poll schedule after a successful 200 response.
 func (db *Abonnements) SetFeedState(feedID int64, lastEntry, etag, lastModified *string, nextPollAt time.Time, errorCount, unchangedCount int) error {
 	const query = `UPDATE feeds
-SET last_entry = ?, etag = ?, last_modified = ?, next_poll_at = ?, last_poll_at = NOW(),
+SET last_entry = ?, etag = ?, last_modified = ?, next_poll_at = ?, last_poll_at = ?,
     error_count = ?, unchanged_count = ?
 WHERE id = ?`
-	_, err := db.Exec(query, lastEntry, etag, lastModified, nextPollAt, errorCount, unchangedCount, feedID)
+	_, err := db.Exec(query, lastEntry, etag, lastModified, nextPollAt, time.Now(), errorCount, unchangedCount, feedID)
 	return err
 }
 
@@ -262,9 +264,9 @@ WHERE id = ?`
 // errors.
 func (db *Abonnements) Reschedule(feedID int64, nextPollAt time.Time, errorCount, unchangedCount int) error {
 	const query = `UPDATE feeds
-SET next_poll_at = ?, last_poll_at = NOW(), error_count = ?, unchanged_count = ?
+SET next_poll_at = ?, last_poll_at = ?, error_count = ?, unchanged_count = ?
 WHERE id = ?`
-	_, err := db.Exec(query, nextPollAt, errorCount, unchangedCount, feedID)
+	_, err := db.Exec(query, nextPollAt, time.Now(), errorCount, unchangedCount, feedID)
 	return err
 }
 
@@ -305,7 +307,7 @@ func (db *Abonnements) MoveFeedURL(feedID int64, newURL string) (bool, error) {
 		return false, err
 	}
 	// Let the surviving feed pick up the merged subscribers on the next tick.
-	if _, err := tx.Exec("UPDATE feeds SET next_poll_at = NOW() WHERE id = ? AND disabled = 0", targetID); err != nil {
+	if _, err := tx.Exec("UPDATE feeds SET next_poll_at = ? WHERE id = ? AND disabled = 0", time.Now(), targetID); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()

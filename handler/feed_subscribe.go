@@ -89,8 +89,19 @@ func (h *Handler) OnSubscribe(c telebot.Context) error {
 		}
 	}
 
+	nextPollAt := h.nextPoll(0, result)
+
+	// The feed answered with a valid 200, so a previously retired feed works again.
+	reactivated, err := h.DB.Abonnements.ReactivateFeed(feedUrl, nextPollAt)
+	if err != nil {
+		log.Printf("subscribe %s: could not reactivate: %s", feedUrl, err)
+	}
+
 	exists, _ := h.DB.Abonnements.ExistsByFeedUrl(chatId, feedUrl)
 	if exists {
+		if reactivated {
+			return c.Send("✅ Der deaktivierte Feed wurde wieder aktiviert.", defaultSendOptions)
+		}
 		return c.Send("✅ Du hast diesen Feed bereits abonniert.", defaultSendOptions)
 	}
 
@@ -109,7 +120,7 @@ func (h *Handler) OnSubscribe(c telebot.Context) error {
 	lastModified := nullableString(result.LastModified)
 	hints := storage.PollHints{Interval: result.FeedInterval, SkipHours: result.SkipHours, SkipDays: result.SkipDays}
 
-	err = h.DB.Abonnements.Create(chatId, chatTitle, feedUrl, lastEntry, etag, lastModified, hints, h.nextPoll(0, result))
+	err = h.DB.Abonnements.Create(chatId, chatTitle, feedUrl, lastEntry, etag, lastModified, hints, nextPollAt)
 	if err != nil {
 		log.Println(err)
 		return c.Send("❌ Beim Abonnieren des Feeds ist ein Fehler aufgetreten.", defaultSendOptions)

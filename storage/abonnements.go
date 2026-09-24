@@ -24,6 +24,7 @@ type (
 		Reschedule(feedID int64, nextPollAt time.Time, errorCount, unchangedCount int) error
 		MoveFeedURL(feedID int64, newURL string) (bool, error)
 		DisableFeed(feedID int64, reason string) error
+		ReactivateFeed(feedUrl string, nextPollAt time.Time) (bool, error)
 	}
 
 	Abonnements struct {
@@ -371,4 +372,17 @@ func (db *Abonnements) DisableFeed(feedID int64, reason string) error {
 	const query = `UPDATE feeds SET disabled = 1, disabled_reason = ?, next_poll_at = NULL WHERE id = ?`
 	_, err := db.Exec(query, reason, feedID)
 	return err
+}
+
+// ReactivateFeed re-enables a retired feed, e.g. after it was successfully
+// fetched again on subscribe. It reports whether the feed was disabled.
+func (db *Abonnements) ReactivateFeed(feedUrl string, nextPollAt time.Time) (bool, error) {
+	const query = `UPDATE feeds SET disabled = 0, disabled_reason = NULL, error_count = 0, next_poll_at = ?
+WHERE url = ? AND disabled = 1`
+	result, err := db.Exec(query, nextPollAt, feedUrl)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n > 0, err
 }

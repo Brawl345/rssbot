@@ -1,0 +1,48 @@
+version: 2
+
+project_name: rssbot
+
+builds:
+  - main: .
+    binary: "rssbot-{{ .Os }}-{{ .Arch }}"
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -buildid=
+      - -X github.com/Brawl345/rssbot/fetcher.Version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - "386"
+      - arm
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: darwin
+        goarch: "386"
+      - goos: darwin
+        goarch: arm
+
+archives:
+  - formats:
+      - zip
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}-{{ .Tag }}"
+    files:
+      - none*
+
+checksum:
+  disable: true
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: Brawl345
+    name: rssbot
